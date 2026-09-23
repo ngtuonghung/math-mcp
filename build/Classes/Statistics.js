@@ -17,7 +17,7 @@ export class Statistics {
      */
     static median(numbers) {
         //Sort numbers
-        numbers.sort();
+        numbers.sort((a, b) => a - b);
         //Find the median index
         const medianIndex = numbers.length / 2;
         let medianValue;

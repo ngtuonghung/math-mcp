@@ -20,7 +20,7 @@ export class Statistics {
      */
     static median(numbers: number[]) {
         //Sort numbers
-        numbers.sort()
+        numbers.sort((a, b) => a - b)
 
         //Find the median index
         const medianIndex = numbers.length / 2

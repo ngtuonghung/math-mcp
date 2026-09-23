@@ -12,6 +12,7 @@ A Model Context Protocol (MCP) server that provides basic mathematical, statisti
 - Statistical functions (mean, median, mode, min, max)
 - Rounding functions (floor, ceiling, round)
 - Trigonometric functions (sin, cos, tan, and their inverses; degrees/radians conversions)
+- Decimal and hexadecimal integer inputs, alignment, and bitwise operations
 
 ## Installation
 > **Note:** Ensure you have [Node.js](https://nodejs.org/en/download) installed on your computer.
@@ -51,6 +52,18 @@ Replace `PATH\\TO\\PROJECT` with the actual path to where you cloned the reposit
 
 The Math-MCP server provides the following mathematical operations:
 
+All numeric parameters accept JSON numbers, decimal integer strings (for example,
+`"9007199254740993"`), and `0x`-prefixed hexadecimal integer strings (for example,
+`"0x1000"` or `"-0x10"`). Arrays may mix these forms. Use strings for integers
+larger than `9007199254740991`; unsafe JSON integers are rejected. Hex strings do
+not support fractional values.
+
+Results remain MCP text. If any input is hex, integer results use lowercase hex
+(`0x...` or `-0x...`); fractional results use decimal. Inputs containing only
+decimal forms return decimal. For `mode`, this rule applies to each reported
+mode value, while the frequency remains decimal. Calculations requiring floating
+point values reject large integer inputs when converting them would lose precision.
+
 ### Arithmetic Operations
 | Function | Description | Parameters |
 |----------|-------------|------------|
@@ -84,3 +97,22 @@ The Math-MCP server provides the following mathematical operations:
 | `arctan` | Calculates the arctangent (in radians) of a number | `number`: The number to find the arctangent of |
 | `radiansToDegrees` | Converts a radian value to its equivalent in degrees | `number`: The number in radians to convert to degrees |
 | `degreesToRadians` | Converts a degree value to its equivalent in radians | `number`: The number in degrees to convert to radians |
+
+### Alignment and Bitwise Operations
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `align` | Returns the aligned value at or below and at or above a nonnegative integer as JSON text, such as `{"down":"0x1000","up":"0x2000"}` | `value`: Nonnegative integer<br>`boundary`: Positive integer |
+| `castInteger` | Wraps an integer to the selected type and returns `result`, `min`, `max`, and `status` (`inRange`, `overflow`, or `underflow`) as JSON text | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`signed`: Boolean |
+| `bitAnd` | Bitwise AND | `firstNumber`, `secondNumber`: Integers |
+| `bitOr` | Bitwise OR | `firstNumber`, `secondNumber`: Integers |
+| `bitXor` | Bitwise XOR | `firstNumber`, `secondNumber`: Integers |
+| `shiftLeft` | Left shift | `number`: Integer<br>`count`: Integer from 0 to 64 |
+| `shiftRight` | Arithmetic right shift | `number`: Integer<br>`count`: Integer from 0 to 64 |
+
+Bitwise operations use `BigInt` semantics. Negative values use signed bitwise
+behavior; shifts do not truncate results to 64 bits.
+
+`castInteger` keeps the low `bits` bits and interprets them as signed or
+unsigned. For example, `{"value":300,"bits":8,"signed":false}` returns
+`{"result":"44","min":"0","max":"255","status":"overflow"}`. A hex
+`value` makes `result`, `min`, and `max` hex strings.

@@ -1,405 +1,171 @@
-/**
- * Math MCP Server
- * 
- * This file implements a Model Context Protocol (MCP) server that provides
- * various mathematical operations as tools. Each tool accepts numeric inputs
- * and returns the calculated result.
- */
-
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { Arithmetic } from "./Classes/Arithmetic.js";
 import { Statistics } from "./Classes/Statistics.js";
 import { Trigonometric } from "./Classes/Trigonometric.js";
+import { calculate, format, integers, isHex, mode, numericInput } from "./Numeric.js";
+import type { NumericInput } from "./Numeric.js";
+
+const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
+const pair = { firstNumber: numericInput, secondNumber: numericInput };
+const list = { numbers: z.array(numericInput).min(1) };
+const unary = { number: numericInput };
+const sum = (values: bigint[]) => values.reduce((total, value) => total + value, 0n);
+const safe = (value: bigint) => {
+    if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < -BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error("A non-integer calculation cannot safely use this large integer");
+    }
+};
 
 export default function createServer() {
-    const mathServer = new McpServer({
-        name: "math",
-        version: "0.1.1"
-    })
+    const mathServer = new McpServer({ name: "math", version: "0.1.1" });
 
-    /**
- * Addition operation
- * Adds two numbers and returns their sum
- */
-    mathServer.tool("add", "Adds two numbers together", {
-        firstNumber: z.number().describe("The first addend"),
-        secondNumber: z.number().describe("The second addend")
-    }, async ({ firstNumber, secondNumber }) => {
-        const value = Arithmetic.add(firstNumber, secondNumber)
+    mathServer.tool("add", "Adds two numbers together", pair,
+        async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
+            ([a, b]) => Arithmetic.add(a, b), ([a, b]) => a + b)));
+    mathServer.tool("subtract", "Subtracts the second number from the first number",
+        { minuend: numericInput, subtrahend: numericInput },
+        async ({ minuend, subtrahend }) => reply(calculate([minuend, subtrahend],
+            ([a, b]) => Arithmetic.subtract(a, b), ([a, b]) => a - b)));
+    mathServer.tool("multiply", "Multiplies two numbers together", pair,
+        async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
+            ([a, b]) => Arithmetic.multiply(a, b), ([a, b]) => a * b)));
+    mathServer.tool("division", "Divides the first number by the second number",
+        { numerator: numericInput, denominator: numericInput },
+        async ({ numerator, denominator }) => reply(calculate([numerator, denominator],
+            ([a, b]) => Arithmetic.division(a, b), ([a, b]) => {
+                if (b === 0n) throw new Error("Division by zero");
+                if (a % b === 0n) return a / b;
+                safe(a); safe(b);
+            })));
+    mathServer.tool("sum", "Adds any number of numbers together", list,
+        async ({ numbers }) => reply(calculate(numbers,
+            values => Arithmetic.sum(values), sum)));
+    mathServer.tool("modulo", "Divides two numbers and returns the remainder",
+        { numerator: numericInput, denominator: numericInput },
+        async ({ numerator, denominator }) => reply(calculate([numerator, denominator],
+            ([a, b]) => Arithmetic.modulo(a, b), ([a, b]) => {
+                if (b === 0n) throw new Error("Modulo by zero");
+                return a % b;
+            })));
 
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
+    mathServer.tool("mean", "Calculates the arithmetic mean of a list of numbers", list,
+        async ({ numbers }) => reply(calculate(numbers,
+            values => Statistics.mean(values), values => {
+                const total = sum(values);
+                const count = BigInt(values.length);
+                if (total % count === 0n) return total / count;
+                safe(total);
+            })));
+    mathServer.tool("median", "Calculates the median of a list of numbers", list,
+        async ({ numbers }) => reply(calculate(numbers,
+            values => Statistics.median(values), values => {
+                const sorted = [...values].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+                const middle = Math.floor(sorted.length / 2);
+                if (sorted.length % 2) return sorted[middle];
+                const total = sorted[middle - 1] + sorted[middle];
+                if (total % 2n === 0n) return total / 2n;
+                safe(total);
+            })));
+    mathServer.tool("mode", "Finds the most common number in a list of numbers",
+        { numbers: z.array(numericInput) },
+        async ({ numbers }) => reply(mode(numbers)));
+    mathServer.tool("min", "Finds the minimum value from a list of numbers",
+        { numbers: z.array(numericInput) },
+        async ({ numbers }) => reply(calculate(numbers,
+            values => Statistics.min(values), values => values.reduce((min, value) => value < min ? value : min))));
+    mathServer.tool("max", "Finds the maximum value from a list of numbers",
+        { numbers: z.array(numericInput) },
+        async ({ numbers }) => reply(calculate(numbers,
+            values => Statistics.max(values), values => values.reduce((max, value) => value > max ? value : max))));
 
-    /**
-     * Subtraction operation
-     * Subtracts the second number from the first number
-     */
-    mathServer.tool("subtract", "Subtracts the second number from the first number", {
-        minuend: z.number().describe("The number to subtract from (minuend)"),
-        subtrahend: z.number().describe("The number being subtracted (subtrahend)")
-    }, async ({ minuend, subtrahend }) => {
-        const value = Arithmetic.subtract(minuend, subtrahend)
+    mathServer.tool("floor", "Rounds a number down to the nearest integer", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Arithmetic.floor(value), ([value]) => value)));
+    mathServer.tool("ceiling", "Rounds a number up to the nearest integer", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Arithmetic.ceil(value), ([value]) => value)));
+    mathServer.tool("round", "Rounds a number to the nearest integer", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Arithmetic.round(value), ([value]) => value)));
 
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
+    mathServer.tool("sin", "Calculates the sine of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.sin(value))));
+    mathServer.tool("arcsin", "Calculates the arcsine of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.arcsin(value))));
+    mathServer.tool("cos", "Calculates the cosine of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.cos(value))));
+    mathServer.tool("arccos", "Calculates the arccosine of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.arccos(value))));
+    mathServer.tool("tan", "Calculates the tangent of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.tan(value))));
+    mathServer.tool("arctan", "Calculates the arctangent of a number in radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.arctan(value))));
+    mathServer.tool("radiansToDegrees", "Converts radians to degrees", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.radiansToDegrees(value))));
+    mathServer.tool("degreesToRadians", "Converts degrees to radians", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.degreesToRadians(value))));
 
-    /**
-     * Multiplication operation
-     * Multiplies two numbers together
-     */
-    mathServer.tool("multiply", "Multiplies two numbers together", {
-        firstNumber: z.number().describe("The first number"),
-        secondNumber: z.number().describe("The second number")
-    }, async ({ firstNumber, secondNumber }) => {
-        const value = Arithmetic.multiply(firstNumber, secondNumber)
+    mathServer.tool("align", "Returns the aligned boundaries at or below and at or above a value",
+        { value: numericInput, boundary: numericInput },
+        async ({ value, boundary }) => {
+            const [address, size] = integers([value, boundary]);
+            if (address < 0n || size <= 0n) throw new Error("Value must be nonnegative and boundary positive");
+            const down = address / size * size;
+            const up = down === address ? down : down + size;
+            const hex = isHex(value) || isHex(boundary);
+            return reply(JSON.stringify({ down: format(down, hex), up: format(up, hex) }));
+        });
 
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
+    mathServer.tool("castInteger", "Wraps an integer to a signed or unsigned 8, 16, 32, or 64-bit type",
+        { value: numericInput, bits: z.union([z.literal(8), z.literal(16), z.literal(32), z.literal(64)]), signed: z.boolean() },
+        async ({ value, bits, signed }) => {
+            const [input] = integers([value]);
+            const width = BigInt(bits);
+            const min = signed ? -(1n << (width - 1n)) : 0n;
+            const max = (1n << (signed ? width - 1n : width)) - 1n;
+            const result = signed ? BigInt.asIntN(bits, input) : BigInt.asUintN(bits, input);
+            const hex = isHex(value);
+            return reply(JSON.stringify({
+                result: format(result, hex), min: format(min, hex), max: format(max, hex),
+                status: input < min ? "underflow" : input > max ? "overflow" : "inRange"
+            }));
+        });
 
-    /**
-     * Division operation
-     * Divides the first number by the second number
-     */
-    mathServer.tool("division", "Divides the first number by the second number", {
-        numerator: z.number().describe("The number being divided (numerator)"),
-        denominator: z.number().describe("The number to divide by (denominator)")
-    }, async ({ numerator, denominator }) => {
-        const value = Arithmetic.division(numerator, denominator)
+    const bitPair = { firstNumber: numericInput, secondNumber: numericInput };
+    mathServer.tool("bitAnd", "Bitwise AND of two integers", bitPair,
+        async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a & b)));
+    mathServer.tool("bitOr", "Bitwise OR of two integers", bitPair,
+        async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a | b)));
+    mathServer.tool("bitXor", "Bitwise XOR of two integers", bitPair,
+        async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a ^ b)));
+    const shiftInput = { number: numericInput, count: numericInput };
+    mathServer.tool("shiftLeft", "Shifts an integer left by 0 to 64 bits", shiftInput,
+        async ({ number, count }) => reply(bitResult([number, count], ([value, shift]) => {
+            if (shift < 0n || shift > 64n) throw new Error("Shift count must be between 0 and 64");
+            return value << shift;
+        })));
+    mathServer.tool("shiftRight", "Arithmetic right shift by 0 to 64 bits", shiftInput,
+        async ({ number, count }) => reply(bitResult([number, count], ([value, shift]) => {
+            if (shift < 0n || shift > 64n) throw new Error("Shift count must be between 0 and 64");
+            return value >> shift;
+        })));
 
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
+    return mathServer.server;
+}
 
-    /**
-     * Sum operation
-     * Calculates the sum of an array of numbers
-     */
-    mathServer.tool("sum", "Adds any number of numbers together", {
-        numbers: z.array(z.number()).min(1).describe("Array of numbers to sum")
-    }, async ({ numbers }) => {
-        const value = Arithmetic.sum(numbers)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Modulo operation
-     * Finds the remainder of a division
-     */
-    mathServer.tool("modulo", "Divides two numbers and returns the remainder", {
-        numerator: z.number().describe("The number being divided (numerator)"),
-        denominator: z.number().describe("The number to divide by (denominator)")
-    }, async ({ numerator, denominator }) => {
-        const value = Arithmetic.modulo(numerator, denominator)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Mean operation
-     * Calculates the arithmetic mean of an array of numbers
-     */
-    mathServer.tool("mean", "Calculates the arithmetic mean of a list of numbers", {
-        numbers: z.array(z.number()).min(1).describe("Array of numbers to find the mean of")
-    }, async ({ numbers }) => {
-        const value = Statistics.mean(numbers)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Median operation
-     * Calculates the median of an array of numbers
-     */
-    mathServer.tool("median", "Calculates the median of a list of numbers", {
-        numbers: z.array(z.number()).min(1).describe("Array of numbers to find the median of")
-    }, async ({ numbers }) => {
-        const value = Statistics.median(numbers)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Mode operation
-     * Finds the most common number in an array of numbers
-     */
-    mathServer.tool("mode", "Finds the most common number in a list of numbers", {
-        numbers: z.array(z.number()).describe("Array of numbers to find the mode of")
-    }, async ({ numbers }) => {
-        const value = Statistics.mode(numbers)
-
-        return {
-            content: [{
-                type: "text",
-                text: `Entries (${value.modeResult.join(', ')}) appeared ${value.maxFrequency} times`
-            }]
-        }
-    })
-
-    /**
-     * Minimum operation
-     * Finds the smallest number in an array
-     */
-    mathServer.tool("min", "Finds the minimum value from a list of numbers", {
-        numbers: z.array(z.number()).describe("Array of numbers to find the minimum of")
-    }, async ({ numbers }) => {
-        const value = Statistics.min(numbers)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Maximum operation
-     * Finds the largest number in an array
-     */
-    mathServer.tool("max", "Finds the maximum value from a list of numbers", {
-        numbers: z.array(z.number()).describe("Array of numbers to find the maximum of")
-    }, async ({ numbers }) => {
-        const value = Statistics.max(numbers)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Floor operation
-     * Rounds a number down to the nearest integer
-     */
-    mathServer.tool("floor", "Rounds a number down to the nearest integer", {
-        number: z.number().describe("The number to round down"),
-    }, async ({ number }) => {
-        const value = Arithmetic.floor(number)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Ceiling operation
-     * Rounds a number up to the nearest integer
-     */
-    mathServer.tool("ceiling", "Rounds a number up to the nearest integer", {
-        number: z.number().describe("The number to round up"),
-    }, async ({ number }) => {
-        const value = Arithmetic.ceil(number)
-
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Round operation
-     * Rounds a number to the nearest integer
-     */
-    mathServer.tool("round", "Rounds a number to the nearest integer", {
-        number: z.number().describe("The number to round"),
-    }, async ({ number }) => {
-        const value = Arithmetic.round(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Sin operation
-     * Calculates the sine of a number in radians
-     */
-    mathServer.tool("sin", "Calculates the sine of a number in radians", {
-        number: z.number().describe("The number in radians to find the sine of")
-    }, async ({ number }) => {
-        const value = Trigonometric.sin(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Arcsin operation
-     * Calculates the arcsine (in radians) of a number
-     */
-    mathServer.tool("arcsin", "Calculates the arcsine (in radians) of a number", {
-        number: z.number().describe("The number to find the arcsine of")
-    }, async ({ number }) => {
-        const value = Trigonometric.arcsin(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Cos operation
-     * Calculates the cosine of a number in radians
-     */
-    mathServer.tool("cos", "Calculates the cosine of a number in radians", {
-        number: z.number().describe("The number in radians to find the cosine of")
-    }, async ({ number }) => {
-        const value = Trigonometric.cos(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Arccos operation
-     * Calculates the arccosine (in radians) of a number
-     */
-    mathServer.tool("arccos", "Calculates the arccosine (in radians) of a number", {
-        number: z.number().describe("The number to find the arccosine of")
-    }, async ({ number }) => {
-        const value = Trigonometric.arccos(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Tan operation
-     * Calculates the tangent of a number in radians
-     */
-    mathServer.tool("tan", "Calculates the tangent of a number in radians", {
-        number: z.number().describe("The number in radians to find the tangent of")
-    }, async ({ number }) => {
-        const value = Trigonometric.tan(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Arctan operation
-     * Calculates the arctangent (in radians) of a number
-     */
-    mathServer.tool("arctan", "Calculates the arctangent (in radians) of a number", {
-        number: z.number().describe("The number to find the arctangent of")
-    }, async ({ number }) => {
-        const value = Trigonometric.arctan(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Radians to Degrees operation
-     * Converts a radian value to its equivalent in degrees
-     */
-    mathServer.tool("radiansToDegrees", "Converts a radian value to its equivalent in degrees", {
-        number: z.number().describe("The number in radians to convert to degrees")
-    }, async ({ number }) => {
-        const value = Trigonometric.radiansToDegrees(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    /**
-     * Degrees to Radians operation
-     * Converts a degree value to its equivalent in radians
-     */
-    mathServer.tool("degreesToRadians", "Converts a degree value to its equivalent in radians", {
-        number: z.number().describe("The number in degrees to convert to radians")
-    }, async ({ number }) => {
-        const value = Trigonometric.degreesToRadians(number)
-        return {
-            content: [{
-                type: "text",
-                text: `${value}`
-            }]
-        }
-    })
-
-    return mathServer.server
+function bitResult(inputs: NumericInput[], operation: (values: bigint[]) => bigint): string {
+    return format(operation(integers(inputs)), inputs.some(isHex));
 }
 
 async function main() {
     const server = createServer();
-
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    await server.connect(new StdioServerTransport());
     console.error("MCP Server running in stdio mode");
 }
 
-// By default run the server with stdio transport
-main().catch((error) => {
-    console.error("Server error:", error);
-    process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    main().catch(error => {
+        console.error("Server error:", error);
+        process.exit(1);
+    });
+}
