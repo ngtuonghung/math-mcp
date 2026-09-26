@@ -1,151 +1,157 @@
 # Math-MCP
 
-A Model Context Protocol (MCP) server that provides basic mathematical, statistical and trigonometric functions to Large Language Models (LLMs). This server enables LLMs to perform accurate numerical calculations through a simple API.
+Math-MCP is a Model Context Protocol (MCP) server exposing a small, deterministic
+library of mathematical primitives. It is designed for LLMs and applications that
+need reliable calculations, exact integer operations where practical, and a
+consistent text-based tool interface.
 
-<a href="https://glama.ai/mcp/servers/exa5lt8dgd">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/exa5lt8dgd/badge" alt="Math-MCP MCP server" />
-</a>
+## Primitives
 
-## Features
-
-- Basic arithmetic operations (addition, subtraction, multiplication, division, sum, modulo)
-- Statistical functions (mean, median, mode, min, max)
-- Rounding functions (floor, ceiling, round)
-- Trigonometric functions (sin, cos, tan, and their inverses; degrees/radians conversions)
-- Exponentiation, nth roots, and base conversion (2, 8, 10, 16)
-- Decimal-only inputs, alignment, and bitwise operations
-- Modular arithmetic, prime factorization, rotations, and integer byte packing
+- Arithmetic, roots, rounding, and factorial/combinatorial operations
+- Exact modular arithmetic and prime factorization
+- Number-base conversion and fixed-width integer encoding
+- Bitwise, bit-shift, bit-rotation, alignment, and integer-casting operations
+- Statistical summaries
+- Trigonometric functions and angle conversion
 
 ## Installation
-> **Note:** Ensure you have [Node.js](https://nodejs.org/en/download) installed on your computer.
 
-Just clone this repository and save it locally somewhere on your computer.
+Requires [Node.js](https://nodejs.org/en/download).
 
-Then add this server to your MCP configuration file:
+Clone this repository and add it to your MCP configuration:
 
 ```json
 "math": {
   "command": "node",
-  "args": ["PATH\\TO\\PROJECT\\math-mcp\\build\\index.js"]
+  "args": ["PATH/TO/PROJECT/math-mcp/build/index.js"]
 }
 ```
 
-Here is an example for OpenCode
+Replace `PATH/TO/PROJECT` with the actual repository location. The repository
+ships with a build. If you modify the source, rebuild with:
+
+```bash
+npm run build
+```
+
+## Numeric behavior
+
+Numeric parameters accept JSON numbers and decimal integer strings. Use strings
+for integers larger than `9007199254740991`; unsafe JSON integers are rejected.
+Decimal integer strings do not accept fractional parts or alternate bases.
+
+Results are returned as decimal MCP text. Operations backed by floating-point
+math reject large integer inputs when conversion would lose precision. Discrete,
+modular, and bit-oriented operations use exact `BigInt` arithmetic.
+
+## Arithmetic and rounding
+
+Arithmetic operations cover real-valued calculations, integer-safe exponentiation,
+rounding, and exact discrete counts.
+
+| Operation | Description |
+|---|---|
+| `add` | Adds two numbers. |
+| `subtract` | Subtracts the second number from the first. |
+| `multiply` | Multiplies two numbers. |
+| `division` | Divides the first number by the second. |
+| `sum` | Adds an array of numbers. |
+| `modulo` | Returns the remainder of division. |
+| `power` | Raises a base to an exponent. Nonnegative integer exponents are evaluated exactly, up to an exponent of `10000`. |
+| `nthRoot` | Calculates a real nth root. Odd roots support negative numbers. |
+| `exp` | Calculates `e^number`. |
+| `floor` | Rounds down to the nearest integer. |
+| `ceiling` | Rounds up to the nearest integer. |
+| `round` | Rounds to the nearest integer. |
+| `factorial` | Calculates `n!` exactly for integers from `0` through `10000`. |
+| `combination` | Calculates the binomial coefficient `C(n, k)` exactly for `n` up to `100000`. |
+| `permutation` | Calculates ordered selections `P(n, k)` exactly for `n` up to `100000`. |
+
+## Modular and prime operations
+
+These operations provide exact integer foundations for number theory and
+algebraic calculations.
+
+| Operation | Description |
+|---|---|
+| `modPow` | Calculates `base^exponent mod modulus` for a nonnegative exponent and nonzero modulus. Modulus and exponent support up to 8192 bits. |
+| `modInverse` | Calculates the multiplicative inverse modulo a nonzero modulus when it exists. |
+| `factorize` | Returns ascending prime-power factors for integers from `2` through `2^64 - 1`. |
+
+`factorize(360)` returns:
 
 ```json
-{
-  "mcp": {
-    "math-mcp": {
-      "type": "local",
-      "command": [
-        "node",
-        "PATH\\TO\\PROJECT\\math-mcp\\build\\index.js"
-      ]
-    }
-  }
-}
+{"factors":[{"prime":"2","exponent":"3"},{"prime":"3","exponent":"2"},{"prime":"5","exponent":"1"}]}
 ```
 
-Replace `PATH\\TO\\PROJECT` with the actual path to where you cloned the repository.
+## Number representation and conversion
 
-> **Note:** This project comes prebuilt, so installation is easy but if you change anything in the code, rebuild the project with `npm run build`.
+Representation operations convert between common integer formats and encode
+fixed-width values with explicit byte layout.
 
-## Available Functions
+| Operation | Description |
+|---|---|
+| `convertBase` | Converts an integer between bases `2`, `8`, `10`, and `16`. Hex input may include an optional `0x` prefix. |
+| `packInteger` | Encodes an in-range integer as lowercase hexadecimal bytes using a width of `8`, `16`, `32`, or `64` bits, signed or unsigned, little- or big-endian. Out-of-range values are rejected. |
+| `unpackInteger` | Decodes hexadecimal bytes as an integer using the same width, signedness, and endian options. |
 
-The Math-MCP server provides the following mathematical operations:
+`convertBase` with `value="255"`, `fromBase=10`, and `toBase=16` returns `"ff"`.
 
-All numeric parameters accept JSON numbers and decimal integer strings (for
-example, `"9007199254740993"`). Hexadecimal, octal, and binary inputs are
-rejected; use the `convertBase` tool for base conversion. Use strings for
-integers larger than `9007199254740991`; unsafe JSON integers are rejected.
-Decimal strings do not support fractional values; pass those as JSON numbers.
+## Integer and bit operations
 
-Results remain MCP text and are always decimal. Calculations requiring floating
-point values reject large integer inputs when converting them would lose precision.
+Bit operations use fixed and arbitrary `BigInt` behavior. They are useful for
+alignment, masking, type wrapping, and low-level integer transformations.
 
-### Arithmetic Operations
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `add` | Adds two numbers together | `firstNumber`: The first addend<br>`secondNumber`: The second addend |
-| `subtract` | Subtracts the second number from the first number | `minuend`: The number to subtract from (minuend)<br>`subtrahend`: The number being subtracted (subtrahend) |
-| `multiply` | Multiplies two numbers together | `firstNumber`: The first number<br>`secondNumber`: The second number |
-| `division` | Divides the first number by the second number | `numerator`: The number being divided (numerator)<br>`denominator`: The number to divide by (denominator) |
-| `sum` | Adds any number of numbers together | `numbers`: Array of numbers to sum |
-| `modulo` | Divides two numbers and returns the remainder | `numerator`: The number being divided (numerator)<br>`denominator`: The number to divide by (denominator) |
-| `power` | Raises a base to an exponent; exact integer math for nonnegative integer exponents (exponent at most 10000), decimal otherwise | `base`: The base<br>`exponent`: The exponent |
-| `nthRoot` | Calculates the nth root of a number; odd roots of negative numbers are supported | `number`: The number to find the root of<br>`n`: The root degree (nonzero integer) |
-| `exp` | Calculates e raised to the given power | `number`: The exponent |
-| `factorial` | Calculates the factorial of a nonnegative integer exactly | `n`: Nonnegative integer, at most `10000` |
-| `combination` | Calculates the binomial coefficient C(n, k) exactly | `n`: Total items, at most `100000`<br>`k`: Items to choose |
-| `permutation` | Calculates the number of ordered selections P(n, k) exactly | `n`: Total items, at most `100000`<br>`k`: Items to select |
-| `floor` | Rounds a number down to the nearest integer | `number`: The number to round down |
-| `ceiling` | Rounds a number up to the nearest integer | `number`: The number to round up |
-| `round` | Rounds a number to the nearest integer | `number`: The number to round |
+| Operation | Description |
+|---|---|
+| `bitAnd` | Computes bitwise AND. |
+| `bitOr` | Computes bitwise OR. |
+| `bitXor` | Computes bitwise XOR. |
+| `shiftLeft` | Shifts an integer left by `0` to `64` bits. |
+| `shiftRight` | Performs an arithmetic right shift by `0` to `64` bits. |
+| `rotateLeft` | Rotates bits left within an `8`, `16`, `32`, or `64`-bit field. |
+| `rotateRight` | Rotates bits right within an `8`, `16`, `32`, or `64`-bit field. |
+| `castInteger` | Wraps an integer to a signed or unsigned `8`, `16`, `32`, or `64`-bit type and reports range status. |
+| `align` | Returns the aligned boundaries at or below and above a nonnegative integer. |
 
-### Statistical Operations
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `mean` | Calculates the arithmetic mean of a list of numbers | `numbers`: Array of numbers to find the mean of |
-| `median` | Calculates the median of a list of numbers | `numbers`: Array of numbers to find the median of |
-| `mode` | Finds the most common number in a list of numbers | `numbers`: Array of numbers to find the mode of |
-| `min` | Finds the minimum value from a list of numbers | `numbers`: Array of numbers to find the minimum of |
-| `max` | Finds the maximum value from a list of numbers | `numbers`: Array of numbers to find the maximum of |
+General bitwise operations use `BigInt` semantics. Negative values use signed
+bitwise behavior, and shifts do not truncate results to 64 bits. Rotations
+operate on an unsigned fixed-width field and interpret the rotation count modulo
+the selected width.
 
-### Trigonometric Operations
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `sin` | Calculates the sine of a number in radians | `number`: The number in radians to find the sine of |
-| `arcsin` | Calculates the arcsine (in radians) of a number | `number`: The number to find the arcsine of |
-| `cos` | Calculates the cosine of a number in radians | `number`: The number in radians to find the cosine of |
-| `arccos` | Calculates the arccosine (in radians) of a number | `number`: The number to find the arccosine of |
-| `tan` | Calculates the tangent of a number in radians | `number`: The number in radians to find the tangent of |
-| `arctan` | Calculates the arctangent (in radians) of a number | `number`: The number to find the arctangent of |
-| `radiansToDegrees` | Converts a radian value to its equivalent in degrees | `number`: The number in radians to convert to degrees |
-| `degreesToRadians` | Converts a degree value to its equivalent in radians | `number`: The number in degrees to convert to radians |
+## Statistics
 
-### Base Conversion
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `convertBase` | Converts an integer string between bases 2, 8, 10, and 16 and returns lowercase digits with a `-` sign for negatives (no prefixes) | `value`: Integer string<br>`fromBase`: `2`, `8`, `10`, or `16`<br>`toBase`: `2`, `8`, `10`, or `16` |
+Statistical operations accept arrays of numeric values and return decimal text.
 
-For example, `{"value":"255","fromBase":10,"toBase":16}` returns `"ff"`, and
-`{"value":"0xff","fromBase":16,"toBase":10}` returns `"255"`. Hex input may
-include an optional `0x` prefix.
+| Operation | Description |
+|---|---|
+| `mean` | Calculates the arithmetic mean. |
+| `median` | Calculates the median. |
+| `mode` | Reports the most frequent value or values and their frequency. |
+| `min` | Finds the smallest value. |
+| `max` | Finds the largest value. |
 
-### CTF Integer Operations
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `modPow` | Raises a base to a nonnegative exponent modulo a nonzero modulus and returns a value in `0..abs(modulus)-1` | `base`: Integer<br>`exponent`: Nonnegative integer<br>`modulus`: Nonzero integer, at most 8192 bits |
-| `modInverse` | Calculates the inverse of an integer modulo a nonzero modulus | `value`: Integer<br>`modulus`: Nonzero integer, at most 8192 bits |
-| `factorize` | Factors a positive integer into ascending prime powers | `value`: Integer from `2` through `2^64 - 1` |
-| `rotateLeft` | Rotates bits left in a fixed-width unsigned field | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`count`: Nonnegative integer; interpreted modulo `bits` |
-| `rotateRight` | Rotates bits right in a fixed-width unsigned field | Same parameters as `rotateLeft` |
-| `packInteger` | Packs an in-range integer into lowercase hexadecimal bytes | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`signed`: Boolean<br>`endian`: `little` or `big` |
-| `unpackInteger` | Parses hexadecimal bytes as an integer | `value`: Hexadecimal bytes, with optional `0x` prefix and whitespace<br>`bits`, `signed`, `endian`: Same as `packInteger` |
+## Trigonometry
 
-Modular and factorization operations use exact `BigInt` arithmetic. For example,
-`{"base":65,"exponent":17,"modulus":3233}` returns `"2790"`,
-`{"value":17,"modulus":3120}` returns `"2753"`, and `{"value":360}` returns
-`{"factors":[{"prime":"2","exponent":"3"},{"prime":"3","exponent":"2"},{"prime":"5","exponent":"1"}]}`.
-Rotations wrap within the selected field and return unsigned decimal values.
-`packInteger` rejects values outside the selected signed/unsigned range; it does
-not silently wrap them. Packed output is contiguous lowercase hex, such as
-`9021a5f7ff7f0000` for `0x7ffff7a52190` as a little-endian 64-bit value.
+Trigonometric operations use radians unless explicitly converting units.
 
-### Alignment and Bitwise Operations
-| Function | Description | Parameters |
-|----------|-------------|------------|
-| `align` | Returns the aligned value at or below and at or above a nonnegative integer as JSON text, such as `{"down":"4096","up":"8192"}` | `value`: Nonnegative integer<br>`boundary`: Positive integer |
-| `castInteger` | Wraps an integer to the selected type and returns `result`, `min`, `max`, and `status` (`inRange`, `overflow`, or `underflow`) as JSON text | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`signed`: Boolean |
-| `bitAnd` | Bitwise AND | `firstNumber`, `secondNumber`: Integers |
-| `bitOr` | Bitwise OR | `firstNumber`, `secondNumber`: Integers |
-| `bitXor` | Bitwise XOR | `firstNumber`, `secondNumber`: Integers |
-| `shiftLeft` | Left shift | `number`: Integer<br>`count`: Integer from 0 to 64 |
-| `shiftRight` | Arithmetic right shift | `number`: Integer<br>`count`: Integer from 0 to 64 |
+| Operation | Description |
+|---|---|
+| `sin` | Calculates sine. |
+| `cos` | Calculates cosine. |
+| `tan` | Calculates tangent. |
+| `arcsin` | Calculates inverse sine. |
+| `arccos` | Calculates inverse cosine. |
+| `arctan` | Calculates inverse tangent. |
+| `radiansToDegrees` | Converts radians to degrees. |
+| `degreesToRadians` | Converts degrees to radians. |
 
-Bitwise operations use `BigInt` semantics. Negative values use signed bitwise
-behavior; shifts do not truncate results to 64 bits.
+## Development
 
-`castInteger` keeps the low `bits` bits and interprets them as signed or
-unsigned. For example, `{"value":300,"bits":8,"signed":false}` returns
-`{"result":"44","min":"0","max":"255","status":"overflow"}`.
+```bash
+npm run build
+npm test
+```
+
+Source lives in `src/`. Tests are isolated in `test/` and intentionally excluded
+from the distributed build.
