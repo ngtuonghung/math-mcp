@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Trigonometric } from './Trigonometric.js';
+import { Trigonometric } from '../../src/Classes/Trigonometric.js';
 
 describe("Trigonometric", () => {
     describe("sin()", () => {

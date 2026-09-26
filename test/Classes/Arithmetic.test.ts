@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Arithmetic } from './Arithmetic.js';
+import { Arithmetic } from '../../src/Classes/Arithmetic.js';
 
 describe("Arithmetic", () => {
     describe("add()", () => {

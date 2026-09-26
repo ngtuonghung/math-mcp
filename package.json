@@ -1,6 +1,6 @@
 {
   "name": "math-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "main": "build/index.js",
   "module": "src/index.ts",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
     "start": "node build/index.js",
     "stdio": "npm run build && npm run start",
-    "test": "npx vitest run src/"
+    "test": "npx vitest run test/"
   },
   "keywords": [],
   "files": [

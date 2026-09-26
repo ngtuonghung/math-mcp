@@ -5,6 +5,9 @@ import { z } from "zod";
 import { Arithmetic } from "./Classes/Arithmetic.js";
 import { Statistics } from "./Classes/Statistics.js";
 import { Trigonometric } from "./Classes/Trigonometric.js";
+import {
+    factorize, modularExponentiation, modularInverse, packInteger, rotate, unpackInteger
+} from "./integer.js";
 import { calculate, format, integers, mode, numericInput } from "./Numeric.js";
 import type { NumericInput } from "./Numeric.js";
 
@@ -33,11 +36,13 @@ const safe = (value: bigint) => {
     }
 };
 const baseOption = z.union([z.literal(2), z.literal(8), z.literal(10), z.literal(16)]);
+const widthOption = z.union([z.literal(8), z.literal(16), z.literal(32), z.literal(64)]);
+const endianOption = z.union([z.literal("little"), z.literal("big")]);
 const baseDigits: Record<number, RegExp> = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^[0-9]+$/, 16: /^[0-9a-f]+$/i };
 const basePrefix: Record<number, string> = { 2: "0b", 8: "0o", 10: "", 16: "0x" };
 
 export default function createServer() {
-    const mathServer = new McpServer({ name: "math", version: "0.3.0" });
+    const mathServer = new McpServer({ name: "math", version: "0.4.0" });
 
     mathServer.tool("add", "Adds two numbers together", pair,
         async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
@@ -113,6 +118,53 @@ export default function createServer() {
             if (!baseDigits[fromBase].test(digits)) throw new Error(`Expected base ${fromBase} digits`);
             const parsed = BigInt(match[1] + basePrefix[fromBase] + digits.toLowerCase());
             return reply(parsed.toString(toBase));
+        });
+
+    mathServer.tool("modPow", "Raises a base to an exponent modulo a nonzero modulus",
+        { base: numericInput, exponent: numericInput, modulus: numericInput },
+        async ({ base, exponent, modulus }) => {
+            const [a, b, m] = integers([base, exponent, modulus]);
+            return reply(format(modularExponentiation(a, b, m)));
+        });
+    mathServer.tool("modInverse", "Calculates the inverse of an integer modulo a nonzero modulus",
+        { value: numericInput, modulus: numericInput },
+        async ({ value, modulus }) => {
+            const [a, m] = integers([value, modulus]);
+            return reply(format(modularInverse(a, m)));
+        });
+    mathServer.tool("factorize", "Factorizes a positive integer of at most 64 bits into primes",
+        { value: numericInput },
+        async ({ value }) => {
+            const [number] = integers([value]);
+            return reply(JSON.stringify({
+                factors: factorize(number).map(({ prime, exponent }) => ({
+                    prime: prime.toString(), exponent: exponent.toString()
+                }))
+            }));
+        });
+    const rotateInput = { value: numericInput, bits: widthOption, count: numericInput };
+    mathServer.tool("rotateLeft", "Rotates an integer left within an 8, 16, 32, or 64-bit field", rotateInput,
+        async ({ value, bits, count }) => {
+            const [number, amount] = integers([value, count]);
+            return reply(format(rotate(number, bits, amount, "left")));
+        });
+    mathServer.tool("rotateRight", "Rotates an integer right within an 8, 16, 32, or 64-bit field", rotateInput,
+        async ({ value, bits, count }) => {
+            const [number, amount] = integers([value, count]);
+            return reply(format(rotate(number, bits, amount, "right")));
+        });
+    const packInput = {
+        value: numericInput, bits: widthOption, signed: z.boolean(), endian: endianOption
+    };
+    mathServer.tool("packInteger", "Packs an integer into hexadecimal bytes", packInput,
+        async ({ value, bits, signed, endian }) => {
+            const [number] = integers([value]);
+            return reply(packInteger(number, bits, signed, endian === "little"));
+        });
+    mathServer.tool("unpackInteger", "Unpacks hexadecimal bytes into an integer",
+        { value: z.string().min(1), bits: widthOption, signed: z.boolean(), endian: endianOption },
+        async ({ value, bits, signed, endian }) => {
+            return reply(format(unpackInteger(value, bits, signed, endian === "little")));
         });
 
     mathServer.tool("mean", "Calculates the arithmetic mean of a list of numbers", list,

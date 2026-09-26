@@ -14,6 +14,7 @@ A Model Context Protocol (MCP) server that provides basic mathematical, statisti
 - Trigonometric functions (sin, cos, tan, and their inverses; degrees/radians conversions)
 - Exponentiation, nth roots, and base conversion (2, 8, 10, 16)
 - Decimal-only inputs, alignment, and bitwise operations
+- Modular arithmetic, prime factorization, rotations, and integer byte packing
 
 ## Installation
 > **Note:** Ensure you have [Node.js](https://nodejs.org/en/download) installed on your computer.
@@ -110,6 +111,26 @@ point values reject large integer inputs when converting them would lose precisi
 For example, `{"value":"255","fromBase":10,"toBase":16}` returns `"ff"`, and
 `{"value":"0xff","fromBase":16,"toBase":10}` returns `"255"`. Hex input may
 include an optional `0x` prefix.
+
+### CTF Integer Operations
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `modPow` | Raises a base to a nonnegative exponent modulo a nonzero modulus and returns a value in `0..abs(modulus)-1` | `base`: Integer<br>`exponent`: Nonnegative integer<br>`modulus`: Nonzero integer, at most 8192 bits |
+| `modInverse` | Calculates the inverse of an integer modulo a nonzero modulus | `value`: Integer<br>`modulus`: Nonzero integer, at most 8192 bits |
+| `factorize` | Factors a positive integer into ascending prime powers | `value`: Integer from `2` through `2^64 - 1` |
+| `rotateLeft` | Rotates bits left in a fixed-width unsigned field | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`count`: Nonnegative integer; interpreted modulo `bits` |
+| `rotateRight` | Rotates bits right in a fixed-width unsigned field | Same parameters as `rotateLeft` |
+| `packInteger` | Packs an in-range integer into lowercase hexadecimal bytes | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`signed`: Boolean<br>`endian`: `little` or `big` |
+| `unpackInteger` | Parses hexadecimal bytes as an integer | `value`: Hexadecimal bytes, with optional `0x` prefix and whitespace<br>`bits`, `signed`, `endian`: Same as `packInteger` |
+
+Modular and factorization operations use exact `BigInt` arithmetic. For example,
+`{"base":65,"exponent":17,"modulus":3233}` returns `"2790"`,
+`{"value":17,"modulus":3120}` returns `"2753"`, and `{"value":360}` returns
+`{"factors":[{"prime":"2","exponent":"3"},{"prime":"3","exponent":"2"},{"prime":"5","exponent":"1"}]}`.
+Rotations wrap within the selected field and return unsigned decimal values.
+`packInteger` rejects values outside the selected signed/unsigned range; it does
+not silently wrap them. Packed output is contiguous lowercase hex, such as
+`9021a5f7ff7f0000` for `0x7ffff7a52190` as a little-endian 64-bit value.
 
 ### Alignment and Bitwise Operations
 | Function | Description | Parameters |

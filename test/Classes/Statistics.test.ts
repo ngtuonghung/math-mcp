@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Statistics } from './Statistics.js';
+import { Statistics } from '../../src/Classes/Statistics.js';
 
 describe("Statistics", () => {
     describe("mean()", () => {
