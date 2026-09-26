@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Arithmetic } from "./Classes/Arithmetic.js";
 import { Statistics } from "./Classes/Statistics.js";
 import { Trigonometric } from "./Classes/Trigonometric.js";
-import { calculate, format, integers, isHex, mode, numericInput } from "./Numeric.js";
+import { calculate, format, integers, mode, numericInput } from "./Numeric.js";
 import type { NumericInput } from "./Numeric.js";
 
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
@@ -13,14 +13,31 @@ const pair = { firstNumber: numericInput, secondNumber: numericInput };
 const list = { numbers: z.array(numericInput).min(1) };
 const unary = { number: numericInput };
 const sum = (values: bigint[]) => values.reduce((total, value) => total + value, 0n);
+const factorial = (n: bigint) => {
+    let result = 1n;
+    for (let i = 2n; i <= n; i++) result *= i;
+    return result;
+};
+const falling = (n: bigint, k: bigint) => {
+    let result = 1n;
+    for (let i = 0n; i < k; i++) result *= n - i;
+    return result;
+};
+const combination = (n: bigint, k: bigint) => {
+    const r = k < n - k ? k : n - k;
+    return falling(n, r) / factorial(r);
+};
 const safe = (value: bigint) => {
     if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < -BigInt(Number.MAX_SAFE_INTEGER)) {
         throw new Error("A non-integer calculation cannot safely use this large integer");
     }
 };
+const baseOption = z.union([z.literal(2), z.literal(8), z.literal(10), z.literal(16)]);
+const baseDigits: Record<number, RegExp> = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^[0-9]+$/, 16: /^[0-9a-f]+$/i };
+const basePrefix: Record<number, string> = { 2: "0b", 8: "0o", 10: "", 16: "0x" };
 
 export default function createServer() {
-    const mathServer = new McpServer({ name: "math", version: "0.1.1" });
+    const mathServer = new McpServer({ name: "math", version: "0.3.0" });
 
     mathServer.tool("add", "Adds two numbers together", pair,
         async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
@@ -50,6 +67,53 @@ export default function createServer() {
                 if (b === 0n) throw new Error("Modulo by zero");
                 return a % b;
             })));
+    mathServer.tool("power", "Raises a base to an exponent",
+        { base: numericInput, exponent: numericInput },
+        async ({ base, exponent }) => reply(calculate([base, exponent],
+            ([a, b]) => Arithmetic.power(a, b), ([a, b]) => {
+                if (b < 0n) return undefined;
+                if (b > 10000n) throw new Error("Integer exponent must be at most 10000 for exact results");
+                return a ** b;
+            })));
+    mathServer.tool("nthRoot", "Calculates the nth root of a number",
+        { number: numericInput, n: numericInput },
+        async ({ number, n }) => reply(calculate([number, n],
+            ([value, degree]) => Arithmetic.nthRoot(value, degree))));
+    mathServer.tool("exp", "Calculates e raised to the given power", unary,
+        async ({ number }) => reply(calculate([number], ([value]) => Math.exp(value))));
+    mathServer.tool("factorial", "Calculates the factorial of a nonnegative integer",
+        { n: numericInput },
+        async ({ n }) => {
+            const [value] = integers([n]);
+            if (value < 0n || value > 10000n) throw new Error("n must be between 0 and 10000");
+            return reply(factorial(value).toString());
+        });
+    mathServer.tool("combination", "Calculates the binomial coefficient C(n, k)",
+        { n: numericInput, k: numericInput },
+        async ({ n, k }) => {
+            const [total, choose] = integers([n, k]);
+            if (total < 0n || total > 100000n) throw new Error("n must be between 0 and 100000");
+            if (choose < 0n || choose > total) throw new Error("k must be between 0 and n");
+            return reply(combination(total, choose).toString());
+        });
+    mathServer.tool("permutation", "Calculates the number of ordered selections P(n, k)",
+        { n: numericInput, k: numericInput },
+        async ({ n, k }) => {
+            const [total, choose] = integers([n, k]);
+            if (total < 0n || total > 100000n) throw new Error("n must be between 0 and 100000");
+            if (choose < 0n || choose > total) throw new Error("k must be between 0 and n");
+            return reply(falling(total, choose).toString());
+        });
+    mathServer.tool("convertBase", "Converts an integer string between bases 2, 8, 10, and 16",
+        { value: z.string().min(1), fromBase: baseOption, toBase: baseOption },
+        async ({ value, fromBase, toBase }) => {
+            const match = /^([+-]?)(.*)$/.exec(value.trim());
+            if (!match || !match[2]) throw new Error("Expected an integer string");
+            const digits = fromBase === 16 ? match[2].replace(/^0[xX]/, "") : match[2];
+            if (!baseDigits[fromBase].test(digits)) throw new Error(`Expected base ${fromBase} digits`);
+            const parsed = BigInt(match[1] + basePrefix[fromBase] + digits.toLowerCase());
+            return reply(parsed.toString(toBase));
+        });
 
     mathServer.tool("mean", "Calculates the arithmetic mean of a list of numbers", list,
         async ({ numbers }) => reply(calculate(numbers,
@@ -112,8 +176,7 @@ export default function createServer() {
             if (address < 0n || size <= 0n) throw new Error("Value must be nonnegative and boundary positive");
             const down = address / size * size;
             const up = down === address ? down : down + size;
-            const hex = isHex(value) || isHex(boundary);
-            return reply(JSON.stringify({ down: format(down, hex), up: format(up, hex) }));
+            return reply(JSON.stringify({ down: format(down), up: format(up) }));
         });
 
     mathServer.tool("castInteger", "Wraps an integer to a signed or unsigned 8, 16, 32, or 64-bit type",
@@ -124,9 +187,8 @@ export default function createServer() {
             const min = signed ? -(1n << (width - 1n)) : 0n;
             const max = (1n << (signed ? width - 1n : width)) - 1n;
             const result = signed ? BigInt.asIntN(bits, input) : BigInt.asUintN(bits, input);
-            const hex = isHex(value);
             return reply(JSON.stringify({
-                result: format(result, hex), min: format(min, hex), max: format(max, hex),
+                result: format(result), min: format(min), max: format(max),
                 status: input < min ? "underflow" : input > max ? "overflow" : "inRange"
             }));
         });
@@ -154,7 +216,7 @@ export default function createServer() {
 }
 
 function bitResult(inputs: NumericInput[], operation: (values: bigint[]) => bigint): string {
-    return format(operation(integers(inputs)), inputs.some(isHex));
+    return format(operation(integers(inputs)));
 }
 
 async function main() {

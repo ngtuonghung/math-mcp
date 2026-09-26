@@ -12,7 +12,8 @@ A Model Context Protocol (MCP) server that provides basic mathematical, statisti
 - Statistical functions (mean, median, mode, min, max)
 - Rounding functions (floor, ceiling, round)
 - Trigonometric functions (sin, cos, tan, and their inverses; degrees/radians conversions)
-- Decimal and hexadecimal integer inputs, alignment, and bitwise operations
+- Exponentiation, nth roots, and base conversion (2, 8, 10, 16)
+- Decimal-only inputs, alignment, and bitwise operations
 
 ## Installation
 > **Note:** Ensure you have [Node.js](https://nodejs.org/en/download) installed on your computer.
@@ -52,16 +53,13 @@ Replace `PATH\\TO\\PROJECT` with the actual path to where you cloned the reposit
 
 The Math-MCP server provides the following mathematical operations:
 
-All numeric parameters accept JSON numbers, decimal integer strings (for example,
-`"9007199254740993"`), and `0x`-prefixed hexadecimal integer strings (for example,
-`"0x1000"` or `"-0x10"`). Arrays may mix these forms. Use strings for integers
-larger than `9007199254740991`; unsafe JSON integers are rejected. Hex strings do
-not support fractional values.
+All numeric parameters accept JSON numbers and decimal integer strings (for
+example, `"9007199254740993"`). Hexadecimal, octal, and binary inputs are
+rejected; use the `convertBase` tool for base conversion. Use strings for
+integers larger than `9007199254740991`; unsafe JSON integers are rejected.
+Decimal strings do not support fractional values; pass those as JSON numbers.
 
-Results remain MCP text. If any input is hex, integer results use lowercase hex
-(`0x...` or `-0x...`); fractional results use decimal. Inputs containing only
-decimal forms return decimal. For `mode`, this rule applies to each reported
-mode value, while the frequency remains decimal. Calculations requiring floating
+Results remain MCP text and are always decimal. Calculations requiring floating
 point values reject large integer inputs when converting them would lose precision.
 
 ### Arithmetic Operations
@@ -73,6 +71,12 @@ point values reject large integer inputs when converting them would lose precisi
 | `division` | Divides the first number by the second number | `numerator`: The number being divided (numerator)<br>`denominator`: The number to divide by (denominator) |
 | `sum` | Adds any number of numbers together | `numbers`: Array of numbers to sum |
 | `modulo` | Divides two numbers and returns the remainder | `numerator`: The number being divided (numerator)<br>`denominator`: The number to divide by (denominator) |
+| `power` | Raises a base to an exponent; exact integer math for nonnegative integer exponents (exponent at most 10000), decimal otherwise | `base`: The base<br>`exponent`: The exponent |
+| `nthRoot` | Calculates the nth root of a number; odd roots of negative numbers are supported | `number`: The number to find the root of<br>`n`: The root degree (nonzero integer) |
+| `exp` | Calculates e raised to the given power | `number`: The exponent |
+| `factorial` | Calculates the factorial of a nonnegative integer exactly | `n`: Nonnegative integer, at most `10000` |
+| `combination` | Calculates the binomial coefficient C(n, k) exactly | `n`: Total items, at most `100000`<br>`k`: Items to choose |
+| `permutation` | Calculates the number of ordered selections P(n, k) exactly | `n`: Total items, at most `100000`<br>`k`: Items to select |
 | `floor` | Rounds a number down to the nearest integer | `number`: The number to round down |
 | `ceiling` | Rounds a number up to the nearest integer | `number`: The number to round up |
 | `round` | Rounds a number to the nearest integer | `number`: The number to round |
@@ -98,10 +102,19 @@ point values reject large integer inputs when converting them would lose precisi
 | `radiansToDegrees` | Converts a radian value to its equivalent in degrees | `number`: The number in radians to convert to degrees |
 | `degreesToRadians` | Converts a degree value to its equivalent in radians | `number`: The number in degrees to convert to radians |
 
+### Base Conversion
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `convertBase` | Converts an integer string between bases 2, 8, 10, and 16 and returns lowercase digits with a `-` sign for negatives (no prefixes) | `value`: Integer string<br>`fromBase`: `2`, `8`, `10`, or `16`<br>`toBase`: `2`, `8`, `10`, or `16` |
+
+For example, `{"value":"255","fromBase":10,"toBase":16}` returns `"ff"`, and
+`{"value":"0xff","fromBase":16,"toBase":10}` returns `"255"`. Hex input may
+include an optional `0x` prefix.
+
 ### Alignment and Bitwise Operations
 | Function | Description | Parameters |
 |----------|-------------|------------|
-| `align` | Returns the aligned value at or below and at or above a nonnegative integer as JSON text, such as `{"down":"0x1000","up":"0x2000"}` | `value`: Nonnegative integer<br>`boundary`: Positive integer |
+| `align` | Returns the aligned value at or below and at or above a nonnegative integer as JSON text, such as `{"down":"4096","up":"8192"}` | `value`: Nonnegative integer<br>`boundary`: Positive integer |
 | `castInteger` | Wraps an integer to the selected type and returns `result`, `min`, `max`, and `status` (`inRange`, `overflow`, or `underflow`) as JSON text | `value`: Integer<br>`bits`: `8`, `16`, `32`, or `64`<br>`signed`: Boolean |
 | `bitAnd` | Bitwise AND | `firstNumber`, `secondNumber`: Integers |
 | `bitOr` | Bitwise OR | `firstNumber`, `secondNumber`: Integers |
@@ -114,5 +127,4 @@ behavior; shifts do not truncate results to 64 bits.
 
 `castInteger` keeps the low `bits` bits and interprets them as signed or
 unsigned. For example, `{"value":300,"bits":8,"signed":false}` returns
-`{"result":"44","min":"0","max":"255","status":"overflow"}`. A hex
-`value` makes `result`, `min`, and `max` hex strings.
+`{"result":"44","min":"0","max":"255","status":"overflow"}`.
