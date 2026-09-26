@@ -10,7 +10,7 @@ consistent text-based tool interface.
 - Arithmetic, roots, rounding, and factorial/combinatorial operations
 - Exact modular arithmetic and prime factorization
 - Number-base conversion and fixed-width integer encoding
-- Bitwise, bit-shift, bit-rotation, alignment, and integer-casting operations
+- Bitwise, bit-shift, bit-rotation, bit-inspection, alignment, and integer-casting operations
 - Statistical summaries
 - Trigonometric functions and angle conversion
 
@@ -47,7 +47,7 @@ modular, and bit-oriented operations use exact `BigInt` arithmetic.
 ## Arithmetic and rounding
 
 Arithmetic operations cover real-valued calculations, integer-safe exponentiation,
-rounding, and exact discrete counts.
+exact integer roots, rounding, and exact discrete counts.
 
 | Operation | Description |
 |---|---|
@@ -58,8 +58,9 @@ rounding, and exact discrete counts.
 | `sum` | Adds an array of numbers. |
 | `modulo` | Returns the remainder of division. |
 | `power` | Raises a base to an exponent. Nonnegative integer exponents are evaluated exactly, up to an exponent of `10000`. |
-| `nthRoot` | Calculates a real nth root. Odd roots support negative numbers. |
 | `exp` | Calculates `e^number`. |
+| `floorRoot` | Calculates the integer floor of an nth root. Degree must be at least `1`; negative values support odd degrees. |
+| `ceilRoot` | Calculates the integer ceiling of an nth root. Degree must be at least `1`; negative values support odd degrees. |
 | `floor` | Rounds down to the nearest integer. |
 | `ceiling` | Rounds up to the nearest integer. |
 | `round` | Rounds to the nearest integer. |
@@ -67,13 +68,15 @@ rounding, and exact discrete counts.
 | `combination` | Calculates the binomial coefficient `C(n, k)` exactly for `n` up to `100000`. |
 | `permutation` | Calculates ordered selections `P(n, k)` exactly for `n` up to `100000`. |
 
-## Modular and prime operations
+## Divisibility, modular, and prime operations
 
 These operations provide exact integer foundations for number theory and
 algebraic calculations.
 
 | Operation | Description |
 |---|---|
+| `gcd` | Calculates the greatest common divisor of one or more integers. |
+| `lcm` | Calculates the least common multiple of one or more integers. |
 | `modPow` | Calculates `base^exponent mod modulus` for a nonnegative exponent and nonzero modulus. Modulus and exponent support up to 8192 bits. |
 | `modInverse` | Calculates the multiplicative inverse modulo a nonzero modulus when it exists. |
 | `factorize` | Returns ascending prime-power factors for integers from `2` through `2^64 - 1`. |
@@ -111,6 +114,9 @@ alignment, masking, type wrapping, and low-level integer transformations.
 | `shiftRight` | Performs an arithmetic right shift by `0` to `64` bits. |
 | `rotateLeft` | Rotates bits left within an `8`, `16`, `32`, or `64`-bit field. |
 | `rotateRight` | Rotates bits right within an `8`, `16`, `32`, or `64`-bit field. |
+| `bitLength` | Counts binary bits in a nonnegative integer; `0` has length `0`. |
+| `bitCount` | Counts set bits in a nonnegative integer. |
+| `trailingZeros` | Counts trailing zero bits in a nonzero nonnegative integer. |
 | `castInteger` | Wraps an integer to a signed or unsigned `8`, `16`, `32`, or `64`-bit type and reports range status. |
 | `align` | Returns the aligned boundaries at or below and above a nonnegative integer. |
 
@@ -118,6 +124,8 @@ General bitwise operations use `BigInt` semantics. Negative values use signed
 bitwise behavior, and shifts do not truncate results to 64 bits. Rotations
 operate on an unsigned fixed-width field and interpret the rotation count modulo
 the selected width.
+Bit-inspection operations reject negative values, and `trailingZeros(0)` is
+rejected because it is mathematically undefined.
 
 ## Statistics
 

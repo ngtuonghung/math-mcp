@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-    factorize, modularExponentiation, modularInverse, packInteger,
-    rotate, unpackInteger
+    bitCount, bitLength, ceilRoot, factorize, floorRoot, gcd, lcm,
+    modularExponentiation, modularInverse, packInteger, rotate, trailingZeros, unpackInteger
 } from "../src/integer.js";
 
 function bruteFactors(value: bigint): Array<[bigint, bigint]> {
@@ -33,6 +33,36 @@ describe("BigInt CTF operations", () => {
         expect(() => modularExponentiation(1n, -1n, 5n)).toThrow();
         expect(() => modularExponentiation(1n, 1n, 0n)).toThrow();
         expect(() => modularInverse(2n, 4n)).toThrow();
+    });
+
+    it("calculates exact divisibility, roots, and bit inspection", () => {
+        expect(gcd([-48n, 18n, 60n])).toBe(6n);
+        expect(gcd([0n, 0n])).toBe(0n);
+        expect(lcm([-6n, 8n])).toBe(24n);
+        expect(lcm([0n, 8n])).toBe(0n);
+        for (let value = 0n; value < 50n; value++) {
+            for (let degree = 1n; degree < 5n; degree++) {
+                const floor = floorRoot(value, degree);
+                const ceil = ceilRoot(value, degree);
+                expect(floor ** degree).toBeLessThanOrEqual(value);
+                expect((floor + 1n) ** degree).toBeGreaterThan(value);
+                expect(ceil ** degree).toBeGreaterThanOrEqual(value);
+                if (ceil > 0n) expect((ceil - 1n) ** degree).toBeLessThan(value);
+            }
+        }
+        expect(floorRoot(-10n, 3n)).toBe(-3n);
+        expect(ceilRoot(-10n, 3n)).toBe(-2n);
+        expect(floorRoot(2n ** 128n, 4n)).toBe(1n << 32n);
+        expect(() => floorRoot(-8n, 2n)).toThrow();
+        expect(() => ceilRoot(8n, 0n)).toThrow();
+        expect(bitLength(0n)).toBe(0);
+        expect(bitLength((1n << 128n) - 1n)).toBe(128);
+        expect(bitCount((1n << 64n) - 1n)).toBe(64);
+        expect(trailingZeros(1n << 64n)).toBe(64);
+        expect(() => bitLength(-1n)).toThrow();
+        expect(() => bitCount(-1n)).toThrow();
+        expect(() => trailingZeros(-1n)).toThrow();
+        expect(() => trailingZeros(0n)).toThrow();
     });
 
     it("factorizes values exactly", () => {

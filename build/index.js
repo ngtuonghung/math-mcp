@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Arithmetic } from "./Classes/Arithmetic.js";
 import { Statistics } from "./Classes/Statistics.js";
 import { Trigonometric } from "./Classes/Trigonometric.js";
-import { factorize, modularExponentiation, modularInverse, packInteger, rotate, unpackInteger } from "./integer.js";
+import { bitCount, bitLength, ceilRoot, factorize, floorRoot, gcd, lcm, modularExponentiation, modularInverse, packInteger, rotate, trailingZeros, unpackInteger } from "./integer.js";
 import { calculate, format, integers, mode, numericInput } from "./Numeric.js";
 const reply = (text) => ({ content: [{ type: "text", text }] });
 const pair = { firstNumber: numericInput, secondNumber: numericInput };
@@ -39,7 +39,7 @@ const endianOption = z.union([z.literal("little"), z.literal("big")]);
 const baseDigits = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^[0-9]+$/, 16: /^[0-9a-f]+$/i };
 const basePrefix = { 2: "0b", 8: "0o", 10: "", 16: "0x" };
 export default function createServer() {
-    const mathServer = new McpServer({ name: "math", version: "0.4.0" });
+    const mathServer = new McpServer({ name: "math", version: "0.5.0" });
     mathServer.tool("add", "Adds two numbers together", pair, async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber], ([a, b]) => Arithmetic.add(a, b), ([a, b]) => a + b)));
     mathServer.tool("subtract", "Subtracts the second number from the first number", { minuend: numericInput, subtrahend: numericInput }, async ({ minuend, subtrahend }) => reply(calculate([minuend, subtrahend], ([a, b]) => Arithmetic.subtract(a, b), ([a, b]) => a - b)));
     mathServer.tool("multiply", "Multiplies two numbers together", pair, async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber], ([a, b]) => Arithmetic.multiply(a, b), ([a, b]) => a * b)));
@@ -64,7 +64,16 @@ export default function createServer() {
             throw new Error("Integer exponent must be at most 10000 for exact results");
         return a ** b;
     })));
-    mathServer.tool("nthRoot", "Calculates the nth root of a number", { number: numericInput, n: numericInput }, async ({ number, n }) => reply(calculate([number, n], ([value, degree]) => Arithmetic.nthRoot(value, degree))));
+    mathServer.tool("floorRoot", "Calculates the integer floor of an nth root", { number: numericInput, n: numericInput }, async ({ number, n }) => {
+        const [value, degree] = integers([number, n]);
+        return reply(format(floorRoot(value, degree)));
+    });
+    mathServer.tool("ceilRoot", "Calculates the integer ceiling of an nth root", { number: numericInput, n: numericInput }, async ({ number, n }) => {
+        const [value, degree] = integers([number, n]);
+        return reply(format(ceilRoot(value, degree)));
+    });
+    mathServer.tool("gcd", "Calculates the greatest common divisor of integers", list, async ({ numbers }) => reply(format(gcd(integers(numbers)))));
+    mathServer.tool("lcm", "Calculates the least common multiple of integers", list, async ({ numbers }) => reply(format(lcm(integers(numbers)))));
     mathServer.tool("exp", "Calculates e raised to the given power", unary, async ({ number }) => reply(calculate([number], ([value]) => Math.exp(value))));
     mathServer.tool("factorial", "Calculates the factorial of a nonnegative integer", { n: numericInput }, async ({ n }) => {
         const [value] = integers([n]);
@@ -113,6 +122,18 @@ export default function createServer() {
                 prime: prime.toString(), exponent: exponent.toString()
             }))
         }));
+    });
+    mathServer.tool("bitLength", "Calculates the number of bits in a nonnegative integer", { value: numericInput }, async ({ value }) => {
+        const [number] = integers([value]);
+        return reply(bitLength(number).toString());
+    });
+    mathServer.tool("bitCount", "Counts the set bits in a nonnegative integer", { value: numericInput }, async ({ value }) => {
+        const [number] = integers([value]);
+        return reply(bitCount(number).toString());
+    });
+    mathServer.tool("trailingZeros", "Counts trailing zero bits in a nonzero nonnegative integer", { value: numericInput }, async ({ value }) => {
+        const [number] = integers([value]);
+        return reply(trailingZeros(number).toString());
     });
     const rotateInput = { value: numericInput, bits: widthOption, count: numericInput };
     mathServer.tool("rotateLeft", "Rotates an integer left within an 8, 16, 32, or 64-bit field", rotateInput, async ({ value, bits, count }) => {

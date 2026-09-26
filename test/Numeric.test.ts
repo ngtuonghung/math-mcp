@@ -109,13 +109,16 @@ describe("power, roots, and base conversion", () => {
         expect((await call("power", { base: 2, exponent: "10001" })).error).toBe(true);
     });
 
-    it("calculates real nth roots or rejects non-real results", async () => {
-        expect(await call("nthRoot", { number: 27, n: 3 })).toEqual({ text: "3", error: false });
-        expect(await call("nthRoot", { number: 16, n: 2 })).toEqual({ text: "4", error: false });
-        expect(await call("nthRoot", { number: -27, n: 3 })).toEqual({ text: "-3", error: false });
-        expect((await call("nthRoot", { number: -8, n: 2 })).error).toBe(true);
-        expect((await call("nthRoot", { number: 5, n: 0 })).error).toBe(true);
-        expect((await call("nthRoot", { number: 5, n: 1.5 })).error).toBe(true);
+    it("calculates exact integer roots or rejects undefined roots", async () => {
+        expect(await call("floorRoot", { number: 27, n: 3 })).toEqual({ text: "3", error: false });
+        expect(await call("ceilRoot", { number: 26, n: 3 })).toEqual({ text: "3", error: false });
+        expect(await call("floorRoot", { number: 16, n: 2 })).toEqual({ text: "4", error: false });
+        expect(await call("ceilRoot", { number: 17, n: 2 })).toEqual({ text: "5", error: false });
+        expect(await call("floorRoot", { number: -27, n: 3 })).toEqual({ text: "-3", error: false });
+        expect(await call("ceilRoot", { number: -26, n: 3 })).toEqual({ text: "-2", error: false });
+        expect((await call("floorRoot", { number: -8, n: 2 })).error).toBe(true);
+        expect((await call("floorRoot", { number: 5, n: 0 })).error).toBe(true);
+        expect((await call("ceilRoot", { number: 5, n: 1.5 })).error).toBe(true);
     });
 
     it("converts integers between bases 2, 8, 10, and 16", async () => {
@@ -176,6 +179,20 @@ describe("CTF integer operations", () => {
         expect((await call("modInverse", { value: 2, modulus: 4 })).error).toBe(true);
         expect((await call("factorize", { value: 0 })).error).toBe(true);
         expect((await call("factorize", { value: "18446744073709551616" })).error).toBe(true);
+    });
+
+    it("calculates divisibility and bit magnitude primitives", async () => {
+        expect(await call("gcd", { numbers: ["-48", 18, "60"] })).toEqual({ text: "6", error: false });
+        expect(await call("gcd", { numbers: [0, 0] })).toEqual({ text: "0", error: false });
+        expect(await call("lcm", { numbers: ["-6", 8] })).toEqual({ text: "24", error: false });
+        expect(await call("lcm", { numbers: [0, 8] })).toEqual({ text: "0", error: false });
+        expect(await call("bitLength", { value: "18446744073709551615" })).toEqual({ text: "64", error: false });
+        expect(await call("bitCount", { value: "255" })).toEqual({ text: "8", error: false });
+        expect(await call("trailingZeros", { value: "18446744073709551616" })).toEqual({ text: "64", error: false });
+        expect((await call("bitLength", { value: -1 })).error).toBe(true);
+        expect((await call("bitCount", { value: -1 })).error).toBe(true);
+        expect((await call("trailingZeros", { value: -1 })).error).toBe(true);
+        expect((await call("trailingZeros", { value: 0 })).error).toBe(true);
     });
 
     it("rotates fields and packs integers with explicit byte layout", async () => {

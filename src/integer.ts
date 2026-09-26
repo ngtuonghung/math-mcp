@@ -8,11 +8,12 @@ function abs(value: bigint): bigint {
     return value < 0n ? -value : value;
 }
 
-function bitLength(value: bigint): number {
+function magnitudeBits(value: bigint): number {
+    if (value === 0n) return 0;
     return abs(value).toString(2).length;
 }
 
-function gcd(a: bigint, b: bigint): bigint {
+function pairwiseGcd(a: bigint, b: bigint): bigint {
     a = abs(a);
     b = abs(b);
     while (b) [a, b] = [b, a % b];
@@ -66,7 +67,7 @@ function pollard(value: bigint): bigint {
                 hare = (hare * hare + increment) % value;
                 hare = (hare * hare + increment) % value;
                 if (tortoise === hare) break;
-                divisor = gcd(tortoise > hare ? tortoise - hare : hare - tortoise, value);
+                divisor = pairwiseGcd(tortoise > hare ? tortoise - hare : hare - tortoise, value);
             }
             if (divisor > 1n && divisor < value) return divisor;
         }
@@ -94,15 +95,15 @@ function addFactors(value: bigint, factors: Map<bigint, bigint>): void {
 export function modularExponentiation(base: bigint, exponent: bigint, modulus: bigint): bigint {
     if (modulus === 0n) throw new Error("Modulus must be nonzero");
     if (exponent < 0n) throw new Error("Exponent must be nonnegative");
-    if (bitLength(exponent) > cryptoBitLimit) throw new Error(`Exponent must be at most ${cryptoBitLimit} bits`);
-    if (bitLength(modulus) > cryptoBitLimit) throw new Error(`Modulus must be at most ${cryptoBitLimit} bits`);
+    if (magnitudeBits(exponent) > cryptoBitLimit) throw new Error(`Exponent must be at most ${cryptoBitLimit} bits`);
+    if (magnitudeBits(modulus) > cryptoBitLimit) throw new Error(`Modulus must be at most ${cryptoBitLimit} bits`);
     const size = abs(modulus);
     return powerMod(base, exponent, size);
 }
 
 export function modularInverse(value: bigint, modulus: bigint): bigint {
     if (modulus === 0n) throw new Error("Modulus must be nonzero");
-    if (bitLength(modulus) > cryptoBitLimit) throw new Error(`Modulus must be at most ${cryptoBitLimit} bits`);
+    if (magnitudeBits(modulus) > cryptoBitLimit) throw new Error(`Modulus must be at most ${cryptoBitLimit} bits`);
     const size = abs(modulus);
     let remainder = ((value % size) + size) % size;
     let previous = size;
@@ -124,6 +125,83 @@ export function factorize(value: bigint): Array<{ prime: bigint; exponent: bigin
     addFactors(value, factors);
     return [...factors].map(([prime, exponent]) => ({ prime, exponent }))
         .sort((left, right) => left.prime < right.prime ? -1 : left.prime > right.prime ? 1 : 0);
+}
+
+export function gcd(values: bigint[]): bigint {
+    if (values.length === 0) throw new Error("Expected at least one value");
+    return values.map(abs).reduce(pairwiseGcd);
+}
+
+export function lcm(values: bigint[]): bigint {
+    if (values.length === 0) throw new Error("Expected at least one value");
+    return values.map(abs).reduce((total, value) => {
+        if (total === 0n || value === 0n) return 0n;
+        return total / gcd([total, value]) * value;
+    });
+}
+
+function floorPositiveRoot(value: bigint, degree: bigint): bigint {
+    if (value < 0n) throw new Error("Expected a nonnegative value");
+    if (degree < 1n) throw new Error("Degree must be at least 1");
+    if (value < 2n) return value;
+    const bits = magnitudeBits(value);
+    if (degree >= BigInt(bits)) return 1n;
+    const targetBits = Math.ceil(bits / Number(degree));
+    let low = 0n;
+    let high = 1n << BigInt(targetBits + 1);
+    while (low < high) {
+        const middle = (low + high + 1n) / 2n;
+        if (middle ** degree <= value) low = middle;
+        else high = middle - 1n;
+    }
+    return low;
+}
+
+function ceilPositiveRoot(value: bigint, degree: bigint): bigint {
+    const root = floorPositiveRoot(value, degree);
+    return root ** degree === value ? root : root + 1n;
+}
+
+function root(value: bigint, degree: bigint, direction: "floor" | "ceil"): bigint {
+    if (degree < 1n) throw new Error("Degree must be at least 1");
+    if (value >= 0n) return direction === "floor" ? floorPositiveRoot(value, degree) : ceilPositiveRoot(value, degree);
+    if (degree % 2n === 0n) throw new Error("An even root of a negative number is not an integer");
+    const magnitude = abs(value);
+    return direction === "floor" ? -ceilPositiveRoot(magnitude, degree) : -floorPositiveRoot(magnitude, degree);
+}
+
+export function floorRoot(value: bigint, degree: bigint): bigint {
+    return root(value, degree, "floor");
+}
+
+export function ceilRoot(value: bigint, degree: bigint): bigint {
+    return root(value, degree, "ceil");
+}
+
+export function bitLength(value: bigint): number {
+    if (value < 0n) throw new Error("Value must be nonnegative");
+    return magnitudeBits(value);
+}
+
+export function bitCount(value: bigint): number {
+    if (value < 0n) throw new Error("Value must be nonnegative");
+    let count = 0;
+    while (value) {
+        count += Number(value & 1n);
+        value >>= 1n;
+    }
+    return count;
+}
+
+export function trailingZeros(value: bigint): number {
+    if (value < 0n) throw new Error("Value must be nonnegative");
+    if (value === 0n) throw new Error("The number of trailing zeros is undefined for 0");
+    let count = 0;
+    while ((value & 1n) === 0n) {
+        value >>= 1n;
+        count++;
+    }
+    return count;
 }
 
 export function rotate(value: bigint, bits: Width, count: bigint, direction: "left" | "right"): bigint {
