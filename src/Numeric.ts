@@ -1,0 +1,80 @@
+import { z } from "zod";
+
+export const numericInput = z.union([
+    z.number().refine(value => !Number.isInteger(value) || Number.isSafeInteger(value),
+        "Use a decimal string for integers above 2^53-1"),
+    z.string().regex(/^-?(?:0|[1-9][0-9]*)$/,
+        "Expected a decimal integer string")
+]).describe("JSON number, or decimal integer string (no fractional part or exponent; use strings for integers larger than 9007199254740991)");
+
+export type NumericInput = z.infer<typeof numericInput>;
+const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+
+function parse(value: NumericInput): number | bigint {
+    return typeof value === "number" ? value : BigInt(value);
+}
+
+function safeNumber(value: number | bigint): number {
+    if (typeof value === "number") return value;
+    if (value > maxSafe || value < -maxSafe) {
+        throw new Error("A non-integer calculation cannot safely use this large integer");
+    }
+    return Number(value);
+}
+
+export function integers(inputs: NumericInput[]): bigint[] {
+    return inputs.map(input => {
+        const value = parse(input);
+        if (typeof value === "number") {
+            if (!Number.isSafeInteger(value)) throw new Error("Expected a safe integer");
+            return BigInt(value);
+        }
+        return value;
+    });
+}
+
+export function format(value: number | bigint): string {
+    if (typeof value === "bigint") {
+        return value.toString();
+    }
+    return String(value);
+}
+
+export function calculate(
+    inputs: NumericInput[],
+    floating: (values: number[]) => number,
+    integral?: (values: bigint[]) => bigint | undefined
+): string {
+    const values = inputs.map(parse);
+    const allIntegers = values.every(value => typeof value === "bigint" || Number.isInteger(value));
+    if (integral && allIntegers) {
+        const result = integral(values.map(value => BigInt(value)));
+        if (result !== undefined) return format(result);
+    }
+    if (values.some(value => typeof value === "number" && !Number.isInteger(value)) &&
+        values.some(value => typeof value === "bigint" && (value >= 2n ** 52n || value <= -(2n ** 52n)))) {
+        throw new Error("A fractional calculation cannot safely use this large integer");
+    }
+    return format(floating(values.map(safeNumber)));
+}
+
+export function mode(inputs: NumericInput[]): string {
+    const values = inputs.map(parse);
+    if (values.every(value => typeof value === "bigint" || Number.isInteger(value))) {
+        const counts = new Map<bigint, number>();
+        for (const value of values) {
+            const key = BigInt(value);
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        const frequency = [...counts.values()].reduce((max, count) => Math.max(max, count), 0);
+        const entries = [...counts].filter(([, count]) => count === frequency)
+            .map(([value]) => format(value));
+        return `Entries (${entries.join(", ")}) appeared ${frequency} times`;
+    }
+    const counts = new Map<number, number>();
+    for (const value of values.map(safeNumber)) counts.set(value, (counts.get(value) ?? 0) + 1);
+    const frequency = [...counts.values()].reduce((max, count) => Math.max(max, count), 0);
+    const entries = [...counts].filter(([, count]) => count === frequency)
+        .map(([value]) => format(value));
+    return `Entries (${entries.join(", ")}) appeared ${frequency} times`;
+}
