@@ -9,15 +9,17 @@ import {
     bitCount, bitLength, ceilRoot, factorize, floorRoot, gcd, lcm,
     modularExponentiation, modularInverse, packInteger, rotate, trailingZeros, unpackInteger
 } from "./integer.js";
-import { calculate, format, integers, mode, numericInput } from "./Numeric.js";
+import { calculate, format, formatHex, formatInteger, integers, isHex, mode, numericInput } from "./Numeric.js";
 import type { NumericInput } from "./Numeric.js";
 
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
-const numericDoc = " Numeric arguments accept JSON numbers or decimal integer strings; decimal strings are integer-only.";
+const numericDoc = " Numeric arguments accept JSON numbers, decimal integer strings, or 0x-hex integer strings; string inputs accept integers only.";
 const numericDescription = (description: string) => description + numericDoc;
+const echoDoc = " If every numeric input is a 0x-hex string, integer results are returned as 0x-hex; otherwise results are decimal.";
+const echoDescription = (description: string) => numericDescription(description) + echoDoc;
 const pair = { firstNumber: numericInput, secondNumber: numericInput };
 const list = { numbers: z.array(numericInput).min(1)
-    .describe("One or more numeric values; each accepts a JSON number or decimal integer string.") };
+    .describe("One or more numeric values; each accepts a JSON number, a decimal integer string, or a 0x-hex integer string.") };
 const unary = { number: numericInput };
 const sum = (values: bigint[]) => values.reduce((total, value) => total + value, 0n);
 const factorial = (n: bigint) => {
@@ -57,17 +59,17 @@ const basePrefix: Record<number, string> = { 2: "0b", 8: "0o", 10: "", 16: "0x" 
 export default function createServer() {
     const mathServer = new McpServer({ name: "math", version: "0.5.0" });
 
-    mathServer.tool("add", numericDescription("Adds firstNumber and secondNumber; integer inputs are exact."), pair,
+    mathServer.tool("add", echoDescription("Adds firstNumber and secondNumber; integer inputs are exact."), pair,
         async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
             ([a, b]) => Arithmetic.add(a, b), ([a, b]) => a + b)));
-    mathServer.tool("subtract", numericDescription("Subtracts subtrahend from minuend; integer inputs are exact."),
+    mathServer.tool("subtract", echoDescription("Subtracts subtrahend from minuend; integer inputs are exact."),
         { minuend: numericInput, subtrahend: numericInput },
         async ({ minuend, subtrahend }) => reply(calculate([minuend, subtrahend],
             ([a, b]) => Arithmetic.subtract(a, b), ([a, b]) => a - b)));
-    mathServer.tool("multiply", numericDescription("Multiplies firstNumber by secondNumber; integer inputs are exact."), pair,
+    mathServer.tool("multiply", echoDescription("Multiplies firstNumber by secondNumber; integer inputs are exact."), pair,
         async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
             ([a, b]) => Arithmetic.multiply(a, b), ([a, b]) => a * b)));
-    mathServer.tool("division", numericDescription("Divides numerator by denominator; exact for integer inputs that divide evenly, otherwise floating-point; denominator cannot be zero."),
+    mathServer.tool("division", echoDescription("Divides numerator by denominator; exact for integer inputs that divide evenly, otherwise floating-point; denominator cannot be zero."),
         { numerator: numericInput, denominator: numericInput },
         async ({ numerator, denominator }) => reply(calculate([numerator, denominator],
             ([a, b]) => Arithmetic.division(a, b), ([a, b]) => {
@@ -75,17 +77,17 @@ export default function createServer() {
                 if (a % b === 0n) return a / b;
                 safe(a); safe(b);
             })));
-    mathServer.tool("sum", numericDescription("Adds one or more numbers in order; integer inputs are exact."), list,
+    mathServer.tool("sum", echoDescription("Adds one or more numbers in order; integer inputs are exact."), list,
         async ({ numbers }) => reply(calculate(numbers,
             values => Arithmetic.sum(values), sum)));
-    mathServer.tool("modulo", numericDescription("Returns the remainder after dividing numerator by denominator; integer inputs are exact; denominator cannot be zero."),
+    mathServer.tool("modulo", echoDescription("Returns the remainder after dividing numerator by denominator; integer inputs are exact; denominator cannot be zero."),
         { numerator: numericInput, denominator: numericInput },
         async ({ numerator, denominator }) => reply(calculate([numerator, denominator],
             ([a, b]) => Arithmetic.modulo(a, b), ([a, b]) => {
                 if (b === 0n) throw new Error("Modulo by zero");
                 return a % b;
             })));
-    mathServer.tool("power", numericDescription("Raises base to exponent; nonnegative integer exponents up to 10000 are exact, while negative exponents use floating-point; zero cannot have a negative exponent."),
+    mathServer.tool("power", echoDescription("Raises base to exponent; nonnegative integer exponents up to 10000 are exact, while negative exponents use floating-point; zero cannot have a negative exponent."),
         { base: numericInput, exponent: numericInput },
         async ({ base, exponent }) => reply(calculate([base, exponent],
             ([a, b]) => {
@@ -155,17 +157,17 @@ export default function createServer() {
             return reply((match[1] === "-" ? -magnitude : magnitude).toString(toBase));
         });
 
-    mathServer.tool("modPow", numericDescription("Calculates base raised to a nonnegative exponent modulo a nonzero modulus exactly; exponent and modulus are limited to 8192 bits."),
+    mathServer.tool("modPow", echoDescription("Calculates base raised to a nonnegative exponent modulo a nonzero modulus exactly; exponent and modulus are limited to 8192 bits."),
         { base: numericInput, exponent: numericInput, modulus: numericInput },
         async ({ base, exponent, modulus }) => {
             const [a, b, m] = integers([base, exponent, modulus]);
-            return reply(format(modularExponentiation(a, b, m)));
+            return reply(formatInteger([base, exponent, modulus], modularExponentiation(a, b, m)));
         });
-    mathServer.tool("modInverse", numericDescription("Calculates the exact multiplicative inverse of value modulo a nonzero modulus when that inverse exists; the modulus is limited to 8192 bits."),
+    mathServer.tool("modInverse", echoDescription("Calculates the exact multiplicative inverse of value modulo a nonzero modulus when that inverse exists; the modulus is limited to 8192 bits."),
         { value: numericInput, modulus: numericInput },
         async ({ value, modulus }) => {
             const [a, m] = integers([value, modulus]);
-            return reply(format(modularInverse(a, m)));
+            return reply(formatInteger([value, modulus], modularInverse(a, m)));
         });
     mathServer.tool("factorize", numericDescription("Returns the exact ascending prime-power factorization for an integer from 2 through 2^64 - 1."),
         { value: numericInput },
@@ -196,15 +198,15 @@ export default function createServer() {
             return reply(trailingZeros(number).toString());
         });
     const rotateInput = { value: numericInput, bits: widthOption, count: numericInput };
-    mathServer.tool("rotateLeft", numericDescription("Rotates value left within an unsigned 8, 16, 32, or 64-bit field; the count is taken modulo the selected width."), rotateInput,
+    mathServer.tool("rotateLeft", echoDescription("Rotates value left within an unsigned 8, 16, 32, or 64-bit field; the count is taken modulo the selected width."), rotateInput,
         async ({ value, bits, count }) => {
             const [number, amount] = integers([value, count]);
-            return reply(format(rotate(number, bits, amount, "left")));
+            return reply(formatInteger([value, count], rotate(number, bits, amount, "left")));
         });
-    mathServer.tool("rotateRight", numericDescription("Rotates value right within an unsigned 8, 16, 32, or 64-bit field; the count is taken modulo the selected width."), rotateInput,
+    mathServer.tool("rotateRight", echoDescription("Rotates value right within an unsigned 8, 16, 32, or 64-bit field; the count is taken modulo the selected width."), rotateInput,
         async ({ value, bits, count }) => {
             const [number, amount] = integers([value, count]);
-            return reply(format(rotate(number, bits, amount, "right")));
+            return reply(formatInteger([value, count], rotate(number, bits, amount, "right")));
         });
     const packInput = {
         value: numericInput, bits: widthOption, signed: signedOption, endian: endianOption
@@ -224,7 +226,7 @@ export default function createServer() {
             return reply(format(unpackInteger(value, bits, signed, endian === "little")));
         });
 
-    mathServer.tool("mean", numericDescription("Calculates the arithmetic mean of one or more numbers."), list,
+    mathServer.tool("mean", echoDescription("Calculates the arithmetic mean of one or more numbers."), list,
         async ({ numbers }) => reply(calculate(numbers,
             values => Statistics.mean(values), values => {
                 const total = sum(values);
@@ -232,7 +234,7 @@ export default function createServer() {
                 if (total % count === 0n) return total / count;
                 safe(total);
             })));
-    mathServer.tool("median", numericDescription("Calculates the median value of one or more numbers."), list,
+    mathServer.tool("median", echoDescription("Calculates the median value of one or more numbers."), list,
         async ({ numbers }) => reply(calculate(numbers,
             values => Statistics.median(values), values => {
                 const sorted = [...values].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
@@ -242,14 +244,14 @@ export default function createServer() {
                 if (total % 2n === 0n) return total / 2n;
                 safe(total);
             })));
-    mathServer.tool("mode", numericDescription("Reports the most common value or values in one or more numbers and their frequency."),
+    mathServer.tool("mode", echoDescription("Reports the most common value or values in one or more numbers and their frequency; the frequency stays decimal."),
         list,
         async ({ numbers }) => reply(mode(numbers)));
-    mathServer.tool("min", numericDescription("Finds the minimum value among one or more numbers; integer inputs are exact."),
+    mathServer.tool("min", echoDescription("Finds the minimum value among one or more numbers; integer inputs are exact."),
         list,
         async ({ numbers }) => reply(calculate(numbers,
             values => Statistics.min(values), values => values.reduce((min, value) => value < min ? value : min))));
-    mathServer.tool("max", numericDescription("Finds the maximum value among one or more numbers; integer inputs are exact."),
+    mathServer.tool("max", echoDescription("Finds the maximum value among one or more numbers; integer inputs are exact."),
         list,
         async ({ numbers }) => reply(calculate(numbers,
             values => Statistics.max(values), values => values.reduce((max, value) => value > max ? value : max))));
@@ -278,17 +280,18 @@ export default function createServer() {
     mathServer.tool("degreesToRadians", numericDescription("Converts an angle from degrees to radians using floating-point arithmetic."), unary,
         async ({ number }) => reply(calculate([number], ([value]) => Trigonometric.degreesToRadians(value))));
 
-    mathServer.tool("align", numericDescription("Returns the exact aligned boundaries at or below and at or above value; value must be nonnegative and boundary must be positive."),
+    mathServer.tool("align", echoDescription("Returns the exact aligned boundaries at or below and at or above value; value must be nonnegative and boundary must be positive."),
         { value: numericInput, boundary: numericInput },
         async ({ value, boundary }) => {
             const [address, size] = integers([value, boundary]);
             if (address < 0n || size <= 0n) throw new Error("Value must be nonnegative and boundary positive");
             const down = address / size * size;
             const up = down === address ? down : down + size;
-            return reply(JSON.stringify({ down: format(down), up: format(up) }));
+            const hex = [value, boundary].every(isHex);
+            return reply(JSON.stringify({ down: formatHex(down, hex), up: formatHex(up, hex) }));
         });
 
-    mathServer.tool("castInteger", numericDescription("Wraps an integer to a signed or unsigned 8, 16, 32, or 64-bit type and reports whether the original value was in range."),
+    mathServer.tool("castInteger", echoDescription("Wraps an integer to a signed or unsigned 8, 16, 32, or 64-bit type and reports whether the original value was in range."),
         { value: numericInput, bits: widthOption, signed: signedOption },
         async ({ value, bits, signed }) => {
             const [input] = integers([value]);
@@ -296,26 +299,27 @@ export default function createServer() {
             const min = signed ? -(1n << (width - 1n)) : 0n;
             const max = (1n << (signed ? width - 1n : width)) - 1n;
             const result = signed ? BigInt.asIntN(bits, input) : BigInt.asUintN(bits, input);
+            const hex = isHex(value);
             return reply(JSON.stringify({
-                result: format(result), min: format(min), max: format(max),
+                result: formatHex(result, hex), min: formatHex(min, hex), max: formatHex(max, hex),
                 status: input < min ? "underflow" : input > max ? "overflow" : "inRange"
             }));
         });
 
     const bitPair = { firstNumber: numericInput, secondNumber: numericInput };
-    mathServer.tool("bitAnd", numericDescription("Computes the exact bitwise AND of two integers using BigInt signed semantics."), bitPair,
+    mathServer.tool("bitAnd", echoDescription("Computes the exact bitwise AND of two integers using BigInt signed semantics."), bitPair,
         async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a & b)));
-    mathServer.tool("bitOr", numericDescription("Computes the exact bitwise OR of two integers using BigInt signed semantics."), bitPair,
+    mathServer.tool("bitOr", echoDescription("Computes the exact bitwise OR of two integers using BigInt signed semantics."), bitPair,
         async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a | b)));
-    mathServer.tool("bitXor", numericDescription("Computes the exact bitwise XOR of two integers using BigInt signed semantics."), bitPair,
+    mathServer.tool("bitXor", echoDescription("Computes the exact bitwise XOR of two integers using BigInt signed semantics."), bitPair,
         async ({ firstNumber, secondNumber }) => reply(bitResult([firstNumber, secondNumber], ([a, b]) => a ^ b)));
     const shiftInput = { number: numericInput, count: numericInput };
-    mathServer.tool("shiftLeft", numericDescription("Arithmetically shifts an integer left by 0 to 64 bits without truncating the BigInt result."), shiftInput,
+    mathServer.tool("shiftLeft", echoDescription("Arithmetically shifts an integer left by 0 to 64 bits without truncating the BigInt result."), shiftInput,
         async ({ number, count }) => reply(bitResult([number, count], ([value, shift]) => {
             if (shift < 0n || shift > 64n) throw new Error("Shift count must be between 0 and 64");
             return value << shift;
         })));
-    mathServer.tool("shiftRight", numericDescription("Arithmetically shifts an integer right by 0 to 64 bits without truncating the BigInt result."), shiftInput,
+    mathServer.tool("shiftRight", echoDescription("Arithmetically shifts an integer right by 0 to 64 bits without truncating the BigInt result."), shiftInput,
         async ({ number, count }) => reply(bitResult([number, count], ([value, shift]) => {
             if (shift < 0n || shift > 64n) throw new Error("Shift count must be between 0 and 64");
             return value >> shift;
@@ -325,7 +329,7 @@ export default function createServer() {
 }
 
 function bitResult(inputs: NumericInput[], operation: (values: bigint[]) => bigint): string {
-    return format(operation(integers(inputs)));
+    return formatInteger(inputs, operation(integers(inputs)));
 }
 
 async function main() {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import createServer from "../src/index.js";
+import { formatHex, isHex } from "../src/Numeric.js";
 
 const server = createServer();
 const client = new Client({ name: "numeric-test", version: "1.0.0" });
@@ -29,8 +30,8 @@ describe("MCP numeric inputs and outputs", () => {
         const radians = tools.find(tool => tool.name === "radiansToDegrees")!;
         const schema = radians.inputSchema as any;
         expect(schema.properties.number.description)
-            .toBe("JSON number, or decimal integer string (no fractional part or exponent; use strings for integers larger than 9007199254740991)");
-        expect(radians.description).toContain("JSON numbers or decimal integer strings");
+            .toBe("JSON number, a decimal integer string, or a 0x-hex integer string (hex requires the 0x prefix; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
+        expect(radians.description).toContain("JSON numbers, decimal integer strings, or 0x-hex integer strings");
     });
 
     it("documents every tool and every input field", async () => {
@@ -54,7 +55,7 @@ describe("MCP numeric inputs and outputs", () => {
             }
             if (!nonNumericTools.has(tool.name)) {
                 expect(tool.description, tool.name)
-                    .toContain("JSON numbers or decimal integer strings; decimal strings are integer-only");
+                    .toContain("JSON numbers, decimal integer strings, or 0x-hex integer strings; string inputs accept integers only");
             }
         }
     });
@@ -121,8 +122,10 @@ describe("MCP numeric inputs and outputs", () => {
         }
     });
 
-    it("rejects malformed, hex, and invalid inputs", async () => {
-        expect((await call("add", { firstNumber: "0x10", secondNumber: 1 })).error).toBe(true);
+    it("accepts well-formed hex and rejects malformed and invalid inputs", async () => {
+        expect(await call("add", { firstNumber: "0x10", secondNumber: 1 })).toEqual({ text: "17", error: false });
+        expect((await call("add", { firstNumber: "0x", secondNumber: 1 })).error).toBe(true);
+        expect((await call("add", { firstNumber: "ff", secondNumber: 1 })).error).toBe(true);
         expect((await call("add", { firstNumber: "0xgg", secondNumber: 1 })).error).toBe(true);
         expect((await call("align", { value: 1, boundary: 0 })).error).toBe(true);
         expect((await call("bitAnd", { firstNumber: 1.5, secondNumber: 1 })).error).toBe(true);
@@ -131,6 +134,66 @@ describe("MCP numeric inputs and outputs", () => {
         expect((await call("castInteger", { value: "0xgg", bits: 8, signed: true })).error).toBe(true);
         expect((await call("castInteger", { value: 1, bits: 12, signed: true })).error).toBe(true);
         expect((await call("castInteger", { value: 9007199254740992, bits: 64, signed: false })).error).toBe(true);
+    });
+});
+
+describe("hex helpers", () => {
+    it("formats and detects hexadecimal values", () => {
+        expect(formatHex(255n, true)).toBe("0xff");
+        expect(formatHex(-255n, true)).toBe("-0xff");
+        expect(formatHex(0n, true)).toBe("0x0");
+        expect(formatHex(255n, false)).toBe("255");
+        expect(isHex("0xff")).toBe(true);
+        expect(isHex("-0XFF")).toBe(true);
+        expect(isHex("ff")).toBe(false);
+        expect(isHex("0x")).toBe(false);
+        expect(isHex(5)).toBe(false);
+    });
+});
+
+describe("hexadecimal input and echo output", () => {
+    it("echoes 0x-hex results when every input is hexadecimal", async () => {
+        expect(await call("add", { firstNumber: "0xff", secondNumber: "0x1" })).toEqual({ text: "0x100", error: false });
+        expect(await call("add", { firstNumber: "-0x2", secondNumber: "0x1" })).toEqual({ text: "-0x1", error: false });
+        expect(await call("add", { firstNumber: "0xffffffffffffffff", secondNumber: "0x1" }))
+            .toEqual({ text: "0x10000000000000000", error: false });
+        expect(await call("add", { firstNumber: "0XFF", secondNumber: "0x1" })).toEqual({ text: "0x100", error: false });
+        expect(await call("division", { numerator: "0x8", denominator: "0x4" })).toEqual({ text: "0x2", error: false });
+        expect(await call("division", { numerator: "0x1", denominator: "0x4" })).toEqual({ text: "0.25", error: false });
+        expect(await call("power", { base: "0x10", exponent: "0x2" })).toEqual({ text: "0x100", error: false });
+    });
+
+    it("returns decimal text when any input is decimal or the tool keeps decimal output", async () => {
+        expect(await call("add", { firstNumber: "0xff", secondNumber: 1 })).toEqual({ text: "256", error: false });
+        expect(await call("add", { firstNumber: "0xff", secondNumber: "1" })).toEqual({ text: "256", error: false });
+        expect(await call("sin", { number: "0x0" })).toEqual({ text: "0", error: false });
+        expect(await call("factorial", { n: "0x5" })).toEqual({ text: "120", error: false });
+        expect(await call("gcd", { numbers: ["0x18", "0x30"] })).toEqual({ text: "24", error: false });
+        expect(await call("convertBase", { value: "0xff", fromBase: 16, toBase: 10 })).toEqual({ text: "255", error: false });
+    });
+
+    it("echoes hex across bitwise, modular, rotation, alignment, and casting tools", async () => {
+        expect(await call("bitXor", { firstNumber: "0xff", secondNumber: "0x0f" })).toEqual({ text: "0xf0", error: false });
+        expect(await call("shiftLeft", { number: "0xff", count: "0x4" })).toEqual({ text: "0xff0", error: false });
+        expect(await call("shiftRight", { number: "-0x2", count: "0x1" })).toEqual({ text: "-0x1", error: false });
+        expect(await call("rotateLeft", { value: "0x80000001", bits: 32, count: "0x1" })).toEqual({ text: "0x3", error: false });
+        expect(await call("modPow", { base: "0x10", exponent: "0x2", modulus: "0x101" })).toEqual({ text: "0x100", error: false });
+        expect(await call("modInverse", { value: "0x3", modulus: "0xb" })).toEqual({ text: "0x4", error: false });
+        expect(await call("align", { value: "0x12345678", boundary: "0x1000" }))
+            .toEqual({ text: '{"down":"0x12345000","up":"0x12346000"}', error: false });
+        expect(await call("castInteger", { value: "0x1ffffffff", bits: 32, signed: false }))
+            .toEqual({ text: '{"result":"0xffffffff","min":"0x0","max":"0xffffffff","status":"overflow"}', error: false });
+    });
+
+    it("echoes hex for statistics with integer results", async () => {
+        expect(await call("median", { numbers: ["0x1", "0x2", "0x4"] })).toEqual({ text: "0x2", error: false });
+        expect(await call("median", { numbers: ["0x1", "0x2"] })).toEqual({ text: "1.5", error: false });
+        expect(await call("mode", { numbers: ["0xff", "0xff", "0x1"] }))
+            .toEqual({ text: "Entries (0xff) appeared 2 times", error: false });
+        expect(await call("min", { numbers: ["0x10", "0x2"] })).toEqual({ text: "0x2", error: false });
+        expect(await call("max", { numbers: ["0x10", "0x2"] })).toEqual({ text: "0x10", error: false });
+        expect(await call("mean", { numbers: ["0x2", "0x4"] })).toEqual({ text: "0x3", error: false });
+        expect(await call("mean", { numbers: ["0x1", "0x2"] })).toEqual({ text: "1.5", error: false });
     });
 });
 

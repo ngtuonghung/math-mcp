@@ -37,13 +37,23 @@ npm run build
 
 ## Numeric behavior
 
-Numeric parameters accept JSON numbers and decimal integer strings. Use strings
-for integers larger than `9007199254740991`; unsafe JSON integers are rejected.
-Decimal integer strings do not accept fractional parts or alternate bases.
+Numeric parameters accept JSON numbers, decimal integer strings, and `0x`-hex
+integer strings (hex requires the `0x` prefix and accepts uppercase digits and a
+leading minus). Use decimal strings for integers larger than `9007199254740991`;
+unsafe JSON integers are rejected. String inputs never accept fractional parts.
 
-Results are returned as decimal MCP text. Operations backed by floating-point
-math reject large integer inputs when conversion would lose precision. Discrete,
-modular, and bit-oriented operations use exact `BigInt` arithmetic.
+For the arithmetic, bitwise, modular, rotation, alignment, casting, and statistics
+tools, when every numeric input in a call is a hexadecimal string, integer
+results are returned as lowercase `0x`-hex (`-0x` for negatives, unpadded). Any
+decimal or fractional input, or a floating-point result, is returned as decimal
+text; `mode` echoes hex entries but its frequency stays decimal.
+Count-like outputs (`factorial`, `combination`, `permutation`, integer roots,
+`gcd`/`lcm`, bit counts, `factorize`) and the explicit-format tools
+(`convertBase`, `packInteger`, `unpackInteger`) always return decimal text.
+
+Operations backed by floating-point math reject large integer inputs when
+conversion would lose precision. Discrete, modular, and bit-oriented operations
+use exact `BigInt` arithmetic.
 
 ## Arithmetic and rounding
 

@@ -3,15 +3,26 @@ import { z } from "zod";
 export const numericInput = z.union([
     z.number().refine(value => !Number.isInteger(value) || Number.isSafeInteger(value),
         "Use a decimal string for integers above 2^53-1"),
-    z.string().regex(/^-?(?:0|[1-9][0-9]*)$/,
-        "Expected a decimal integer string")
-]).describe("JSON number, or decimal integer string (no fractional part or exponent; use strings for integers larger than 9007199254740991)");
+    z.string().regex(/^(?:-?(?:0|[1-9][0-9]*)|-?0[xX][0-9a-fA-F]+)$/,
+        "Expected a decimal or 0x-hex integer string")
+]).describe("JSON number, a decimal integer string, or a 0x-hex integer string (hex requires the 0x prefix; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
 
 export type NumericInput = z.infer<typeof numericInput>;
 const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
 
+export function isHex(input: NumericInput): boolean {
+    return typeof input === "string" && /^-?0[xX][0-9a-fA-F]+$/.test(input);
+}
+
+export function formatHex(value: bigint, hex: boolean): string {
+    if (!hex) return value.toString();
+    return (value < 0n ? "-0x" : "0x") + (value < 0n ? -value : value).toString(16);
+}
+
 function parse(value: NumericInput): number | bigint {
-    return typeof value === "number" ? value : BigInt(value);
+    if (typeof value === "number") return value;
+    // BigInt accepts 0x-hex but not a leading minus on it, so strip and negate.
+    return /^-0[xX]/.test(value) ? -BigInt(value.slice(1)) : BigInt(value);
 }
 
 function safeNumber(value: number | bigint): number {
@@ -40,6 +51,10 @@ export function format(value: number | bigint): string {
     return String(value);
 }
 
+export function formatInteger(inputs: NumericInput[], value: bigint): string {
+    return formatHex(value, inputs.every(isHex));
+}
+
 export function calculate(
     inputs: NumericInput[],
     floating: (values: number[]) => number,
@@ -49,7 +64,7 @@ export function calculate(
     const allIntegers = values.every(value => typeof value === "bigint" || Number.isInteger(value));
     if (integral && allIntegers) {
         const result = integral(values.map(value => BigInt(value)));
-        if (result !== undefined) return format(result);
+        if (result !== undefined) return formatInteger(inputs, result);
     }
     if (values.some(value => typeof value === "number" && !Number.isInteger(value)) &&
         values.some(value => typeof value === "bigint" && (value >= 2n ** 52n || value <= -(2n ** 52n)))) {
@@ -61,6 +76,7 @@ export function calculate(
 export function mode(inputs: NumericInput[]): string {
     const values = inputs.map(parse);
     if (values.every(value => typeof value === "bigint" || Number.isInteger(value))) {
+        const hex = inputs.every(isHex);
         const counts = new Map<bigint, number>();
         for (const value of values) {
             const key = BigInt(value);
@@ -68,7 +84,7 @@ export function mode(inputs: NumericInput[]): string {
         }
         const frequency = [...counts.values()].reduce((max, count) => Math.max(max, count), 0);
         const entries = [...counts].filter(([, count]) => count === frequency)
-            .map(([value]) => format(value));
+            .map(([value]) => formatHex(value, hex));
         return `Entries (${entries.join(", ")}) appeared ${frequency} times`;
     }
     const counts = new Map<number, number>();
