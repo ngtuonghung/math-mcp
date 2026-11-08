@@ -37,19 +37,24 @@ npm run build
 
 ## Numeric behavior
 
-Numeric parameters accept JSON numbers, decimal integer strings, and `0x`-hex
-integer strings (hex requires the `0x` prefix and accepts uppercase digits and a
-leading minus). Use decimal strings for integers larger than `9007199254740991`;
-unsafe JSON integers are rejected. String inputs never accept fractional parts.
+Numeric parameters accept JSON numbers, decimal integer strings, `0x`-hex
+integer strings, and `0b`-binary integer strings (hex requires the `0x` prefix,
+binary requires the `0b` prefix, and both accept uppercase digits and a leading
+minus). Bare digit strings are always decimal. Use decimal strings for integers
+larger than `9007199254740991`; unsafe JSON integers are rejected. String
+inputs never accept fractional parts.
 
-For the arithmetic, bitwise, modular, rotation, alignment, casting, and statistics
-tools, when every numeric input in a call is a hexadecimal string, integer
-results are returned as lowercase `0x`-hex (`-0x` for negatives, unpadded). Any
-decimal or fractional input, or a floating-point result, is returned as decimal
-text; `mode` echoes hex entries but its frequency stays decimal.
-Count-like outputs (`factorial`, `combination`, `permutation`, integer roots,
-`gcd`/`lcm`, bit counts, `factorize`) and the explicit-format tools
-(`convertBase`, `packInteger`, `unpackInteger`) always return decimal text.
+For the arithmetic, divisibility, modular, root, combinatorial, bitwise,
+rotation, bit-inspection, alignment, casting, and statistics tools, when every
+numeric input in a call is a hexadecimal string, integer results are returned
+as lowercase `0x`-hex; when every input is a binary string, they are returned
+as `0b`-binary (`-0x` / `-0b` for negatives, unpadded). Any decimal or
+fractional input, mixed-radix input, or a floating-point result, is returned as
+decimal text; `mode` echoes radix entries but its frequency stays decimal.
+`packInteger` always returns `0x`-prefixed hexadecimal bytes, and
+`unpackInteger` requires the `0x` prefix on input and returns `0x`-hex.
+`convertBase` returns the base prefix `0b`, `0o`, or `0x`; base 10 stays plain,
+and its input accepts an optional prefix matching `fromBase`.
 
 Operations backed by floating-point math reject large integer inputs when
 conversion would lose precision. Discrete, modular, and bit-oriented operations
@@ -105,11 +110,11 @@ fixed-width values with explicit byte layout.
 
 | Operation | Description |
 |---|---|
-| `convertBase` | Converts an integer between bases `2`, `8`, `10`, and `16`. Hex input may include an optional `0x` prefix. |
-| `packInteger` | Encodes an in-range integer as lowercase hexadecimal bytes using a width of `8`, `16`, `32`, or `64` bits, signed or unsigned, little- or big-endian. Out-of-range values are rejected. |
-| `unpackInteger` | Decodes hexadecimal bytes as an integer using the same width, signedness, and endian options. |
+| `convertBase` | Converts an integer between bases `2`, `8`, `10`, and `16`. The result carries the base prefix (`0b`, `0o`, `0x`; base 10 plain). Input may include an optional matching prefix. |
+| `packInteger` | Encodes an in-range integer as lowercase `0x`-prefixed hexadecimal bytes using a width of `8`, `16`, `32`, or `64` bits, signed or unsigned, little- or big-endian. Out-of-range values are rejected. |
+| `unpackInteger` | Decodes `0x`-prefixed hexadecimal bytes as an integer using the same width, signedness, and endian options, and returns the integer as `0x`-hex. |
 
-`convertBase` with `value="255"`, `fromBase=10`, and `toBase=16` returns `"ff"`.
+`convertBase` with `value="255"`, `fromBase=10`, and `toBase=16` returns `"0xff"`.
 
 ## Integer and bit operations
 
@@ -140,7 +145,8 @@ rejected because it is mathematically undefined.
 
 ## Statistics
 
-Statistical operations accept arrays of numeric values and return decimal text.
+Statistical operations accept arrays of numeric values and echo the input radix
+for integer results.
 
 | Operation | Description |
 |---|---|

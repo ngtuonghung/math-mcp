@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import createServer from "../src/index.js";
+import { formatInt } from "../src/Numeric.js";
 import type { NumericInput } from "../src/Numeric.js";
 
 const server = createServer();
@@ -203,6 +204,7 @@ describe("deterministic MCP operation properties", () => {
 
     it("round-trips representations and exact bit operations", async () => {
         const bases = [2, 8, 10, 16] as const;
+        const basePrefixes = { 2: "0b", 8: "0o", 10: "", 16: "0x" } as const;
         await exact("convertBase", { value: "-0xff", fromBase: 16, toBase: 10 }, -255n);
         await exact("convertBase", { value: "+0xff", fromBase: 16, toBase: 10 }, 255n);
         for (let round = 0; round < 30; round++) {
@@ -211,7 +213,8 @@ describe("deterministic MCP operation properties", () => {
                 const magnitude = (value < 0 ? -value : value).toString(16);
                 const hexadecimal = value < 0 ? `-${magnitude}` : magnitude;
                 const text = await ok("convertBase", { value: hexadecimal, fromBase: 16, toBase: base });
-                expect(text).toBe(value.toString(base));
+                const magnitudeDigits = (value < 0 ? -value : value).toString(base);
+                expect(text).toBe((value < 0 ? "-" : "") + basePrefixes[base] + magnitudeDigits);
                 await exact("convertBase", { value: text, fromBase: base, toBase: 10 }, value);
             }
 
@@ -224,7 +227,9 @@ describe("deterministic MCP operation properties", () => {
             const packed = await ok("packInteger", {
                 value: rangeValue.toString(), bits, signed, endian
             });
-            await exact("unpackInteger", { value: packed, bits, signed, endian }, rangeValue);
+            expect(packed.startsWith("0x")).toBe(true);
+            expect(await ok("unpackInteger", { value: packed, bits, signed, endian }))
+                .toBe(formatInt(rangeValue, "hex"));
             await rejected("packInteger", { value: (max + 1n).toString(), bits, signed, endian });
 
             await exact("bitAnd", { firstNumber: "12", secondNumber: "10" }, 8n);

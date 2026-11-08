@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import createServer from "../src/index.js";
-import { formatHex, isHex } from "../src/Numeric.js";
+import { detectMode, formatInt, isBin, isHex } from "../src/Numeric.js";
 
 const server = createServer();
 const client = new Client({ name: "numeric-test", version: "1.0.0" });
@@ -30,8 +30,8 @@ describe("MCP numeric inputs and outputs", () => {
         const radians = tools.find(tool => tool.name === "radiansToDegrees")!;
         const schema = radians.inputSchema as any;
         expect(schema.properties.number.description)
-            .toBe("JSON number, a decimal integer string, or a 0x-hex integer string (hex requires the 0x prefix; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
-        expect(radians.description).toContain("JSON numbers, decimal integer strings, or 0x-hex integer strings");
+            .toBe("JSON number, a decimal integer string, or a 0x-hex or 0b-binary integer string (hex requires 0x and binary requires 0b; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
+        expect(radians.description).toContain("JSON numbers, decimal integer strings, or 0x-hex or 0b-binary integer strings");
     });
 
     it("documents every tool and every input field", async () => {
@@ -55,7 +55,7 @@ describe("MCP numeric inputs and outputs", () => {
             }
             if (!nonNumericTools.has(tool.name)) {
                 expect(tool.description, tool.name)
-                    .toContain("JSON numbers, decimal integer strings, or 0x-hex integer strings; string inputs accept integers only");
+                    .toContain("JSON numbers, decimal integer strings, or 0x-hex or 0b-binary integer strings; string inputs accept integers only");
             }
         }
     });
@@ -137,17 +137,32 @@ describe("MCP numeric inputs and outputs", () => {
     });
 });
 
-describe("hex helpers", () => {
-    it("formats and detects hexadecimal values", () => {
-        expect(formatHex(255n, true)).toBe("0xff");
-        expect(formatHex(-255n, true)).toBe("-0xff");
-        expect(formatHex(0n, true)).toBe("0x0");
-        expect(formatHex(255n, false)).toBe("255");
+describe("radix helpers", () => {
+    it("formats and detects hexadecimal, binary, and decimal values", () => {
+        expect(formatInt(255n, "hex")).toBe("0xff");
+        expect(formatInt(-255n, "hex")).toBe("-0xff");
+        expect(formatInt(0n, "hex")).toBe("0x0");
+        expect(formatInt(255n, "dec")).toBe("255");
+        expect(formatInt(255n, "bin")).toBe("0b11111111");
+        expect(formatInt(-5n, "bin")).toBe("-0b101");
+        expect(formatInt(0n, "bin")).toBe("0b0");
         expect(isHex("0xff")).toBe(true);
         expect(isHex("-0XFF")).toBe(true);
         expect(isHex("ff")).toBe(false);
         expect(isHex("0x")).toBe(false);
         expect(isHex(5)).toBe(false);
+        expect(isHex("0b101")).toBe(false);
+        expect(isBin("0b101")).toBe(true);
+        expect(isBin("-0B11")).toBe(true);
+        expect(isBin("0b102")).toBe(false);
+        expect(isBin("0b")).toBe(false);
+        expect(isBin(5)).toBe(false);
+        expect(isBin("1010")).toBe(false);
+        expect(detectMode(["0xff", "0x1"])).toBe("hex");
+        expect(detectMode(["0b1", "0b10"])).toBe("bin");
+        expect(detectMode(["0xff", "0b1"])).toBe("dec");
+        expect(detectMode(["0b1", 0])).toBe("dec");
+        expect(detectMode(["0xff", 1])).toBe("dec");
     });
 });
 
@@ -167,8 +182,8 @@ describe("hexadecimal input and echo output", () => {
         expect(await call("add", { firstNumber: "0xff", secondNumber: 1 })).toEqual({ text: "256", error: false });
         expect(await call("add", { firstNumber: "0xff", secondNumber: "1" })).toEqual({ text: "256", error: false });
         expect(await call("sin", { number: "0x0" })).toEqual({ text: "0", error: false });
-        expect(await call("factorial", { n: "0x5" })).toEqual({ text: "120", error: false });
-        expect(await call("gcd", { numbers: ["0x18", "0x30"] })).toEqual({ text: "24", error: false });
+        expect(await call("factorial", { n: "0x5" })).toEqual({ text: "0x78", error: false });
+        expect(await call("gcd", { numbers: ["0x18", "0x30"] })).toEqual({ text: "0x18", error: false });
         expect(await call("convertBase", { value: "0xff", fromBase: 16, toBase: 10 })).toEqual({ text: "255", error: false });
     });
 
@@ -219,17 +234,18 @@ describe("power, roots, and base conversion", () => {
         expect((await call("ceilRoot", { number: 5, n: 1.5 })).error).toBe(true);
     });
 
-    it("converts integers between bases 2, 8, 10, and 16", async () => {
+    it("converts integers between bases 2, 8, 10, and 16 with mandatory output prefixes", async () => {
         const cases = [
-            [{ value: "255", fromBase: 10, toBase: 16 }, "ff"],
+            [{ value: "255", fromBase: 10, toBase: 16 }, "0xff"],
             [{ value: "0xff", fromBase: 16, toBase: 10 }, "255"],
             [{ value: "ff", fromBase: 16, toBase: 10 }, "255"],
-            [{ value: "10", fromBase: 10, toBase: 2 }, "1010"],
+            [{ value: "10", fromBase: 10, toBase: 2 }, "0b1010"],
             [{ value: "1010", fromBase: 2, toBase: 10 }, "10"],
-            [{ value: "100", fromBase: 10, toBase: 8 }, "144"],
+            [{ value: "0b1010", fromBase: 2, toBase: 10 }, "10"],
+            [{ value: "100", fromBase: 10, toBase: 8 }, "0o144"],
             [{ value: "144", fromBase: 8, toBase: 10 }, "100"],
-            [{ value: "-255", fromBase: 10, toBase: 16 }, "-ff"],
-            [{ value: "18446744073709551615", fromBase: 10, toBase: 16 }, "ffffffffffffffff"],
+            [{ value: "-255", fromBase: 10, toBase: 16 }, "-0xff"],
+            [{ value: "18446744073709551615", fromBase: 10, toBase: 16 }, "0xffffffffffffffff"],
         ] as const;
         for (const [args, text] of cases) {
             expect(await call("convertBase", args)).toEqual({ text, error: false });
@@ -238,6 +254,9 @@ describe("power, roots, and base conversion", () => {
         expect((await call("convertBase", { value: "8", fromBase: 8, toBase: 10 })).error).toBe(true);
         expect((await call("convertBase", { value: "g", fromBase: 16, toBase: 10 })).error).toBe(true);
         expect((await call("convertBase", { value: "", fromBase: 10, toBase: 16 })).error).toBe(true);
+        expect((await call("convertBase", { value: "0xff", fromBase: 2, toBase: 10 })).error).toBe(true);
+        expect((await call("convertBase", { value: "0b", fromBase: 2, toBase: 10 })).error).toBe(true);
+        expect((await call("convertBase", { value: "0o8", fromBase: 8, toBase: 10 })).error).toBe(true);
     });
 
     it("calculates e^n, factorials, combinations, and permutations", async () => {
@@ -302,15 +321,92 @@ describe("CTF integer operations", () => {
             .toEqual({ text: "9223372036854775808", error: false });
         expect(await call("packInteger", {
             value: "140737348182416", bits: 64, signed: false, endian: "little"
-        })).toEqual({ text: "9021a5f7ff7f0000", error: false });
-        expect(await call("unpackInteger", {
+        })).toEqual({ text: "0x9021a5f7ff7f0000", error: false });
+        expect((await call("unpackInteger", {
             value: "de ad be ef", bits: 32, signed: false, endian: "little"
-        })).toEqual({ text: "4022250974", error: false });
+        })).error).toBe(true);
+        expect(await call("unpackInteger", {
+            value: "0xde ad be ef", bits: 32, signed: false, endian: "little"
+        })).toEqual({ text: "0xefbeadde", error: false });
         expect(await call("unpackInteger", {
             value: "0xffffffffffffffff", bits: 64, signed: true, endian: "big"
-        })).toEqual({ text: "-1", error: false });
+        })).toEqual({ text: "-0x1", error: false });
         expect((await call("rotateLeft", { value: 1, bits: 8, count: -1 })).error).toBe(true);
         expect((await call("packInteger", { value: 256, bits: 8, signed: false, endian: "big" })).error).toBe(true);
         expect((await call("unpackInteger", { value: "00", bits: 16, signed: false, endian: "big" })).error).toBe(true);
+    });
+});
+
+describe("binary input and echo output", () => {
+    it("echoes 0b-binary results when every input is binary", async () => {
+        expect(await call("add", { firstNumber: "0b1010", secondNumber: "0b1" })).toEqual({ text: "0b1011", error: false });
+        expect(await call("add", { firstNumber: "-0b10", secondNumber: "0b1" })).toEqual({ text: "-0b1", error: false });
+        expect(await call("add", { firstNumber: "0B11", secondNumber: "0b1" })).toEqual({ text: "0b100", error: false });
+        expect(await call("multiply", { firstNumber: "0b101", secondNumber: "0b11" })).toEqual({ text: "0b1111", error: false });
+        expect(await call("power", { base: "0b10", exponent: "0b10" })).toEqual({ text: "0b100", error: false });
+        expect(await call("subtract", { minuend: "0b1000", subtrahend: "0b10" })).toEqual({ text: "0b110", error: false });
+        expect(await call("sum", { numbers: ["0b1", "0b10", "0b100"] })).toEqual({ text: "0b111", error: false });
+        expect(await call("bitAnd", { firstNumber: "0b1100", secondNumber: "0b1010" })).toEqual({ text: "0b1000", error: false });
+        expect(await call("shiftLeft", { number: "0b1", count: "0b10" })).toEqual({ text: "0b100", error: false });
+        expect(await call("modPow", { base: "0b10", exponent: "0b1000", modulus: "0b1011" })).toEqual({ text: "0b11", error: false });
+        expect(await call("median", { numbers: ["0b1", "0b11"] })).toEqual({ text: "0b10", error: false });
+        expect(await call("median", { numbers: ["0b1", "0b10"] })).toEqual({ text: "1.5", error: false });
+        expect(await call("mode", { numbers: ["0b10", "0b10", "0b1"] }))
+            .toEqual({ text: "Entries (0b10) appeared 2 times", error: false });
+        expect(await call("castInteger", { value: "0b11111111", bits: 8, signed: false }))
+            .toEqual({ text: '{"result":"0b11111111","min":"0b0","max":"0b11111111","status":"inRange"}', error: false });
+        expect(await call("align", { value: "0b1000000000001", boundary: "0b1000000000000" }))
+            .toEqual({ text: '{"down":"0b1000000000000","up":"0b10000000000000"}', error: false });
+    });
+
+    it("returns decimal text for mixed radix or decimal inputs", async () => {
+        expect(await call("add", { firstNumber: "0xff", secondNumber: "0b1" })).toEqual({ text: "256", error: false });
+        expect(await call("add", { firstNumber: "0b1010", secondNumber: 1 })).toEqual({ text: "11", error: false });
+        expect(await call("add", { firstNumber: "1010", secondNumber: 0 })).toEqual({ text: "1010", error: false });
+        expect(await call("add", { firstNumber: "0b1010", secondNumber: "1" })).toEqual({ text: "11", error: false });
+    });
+
+    it("echoes binary across the upgraded count and factor tools", async () => {
+        expect(await call("factorize", { value: "0b1100" })).toEqual({
+            text: '{"factors":[{"prime":"0b10","exponent":"0b10"},{"prime":"0b11","exponent":"0b1"}]}',
+            error: false
+        });
+        expect(await call("factorial", { n: "0b101" })).toEqual({ text: "0b1111000", error: false });
+        expect(await call("gcd", { numbers: ["0b1010", "0b100"] })).toEqual({ text: "0b10", error: false });
+        expect(await call("bitLength", { value: "0b11111111" })).toEqual({ text: "0b1000", error: false });
+        expect(await call("bitCount", { value: "0b11111111" })).toEqual({ text: "0b1000", error: false });
+    });
+
+    it("rejects malformed binary inputs", async () => {
+        expect((await call("add", { firstNumber: "0b", secondNumber: 1 })).error).toBe(true);
+        expect((await call("add", { firstNumber: "0b102", secondNumber: 1 })).error).toBe(true);
+        expect((await call("add", { firstNumber: "0b2", secondNumber: 1 })).error).toBe(true);
+    });
+});
+
+describe("upgraded echo coverage for formerly decimal tools", () => {
+    it("echoes hex for divisibility, roots, combinatorics, and bit inspection", async () => {
+        expect(await call("lcm", { numbers: ["0x6", "0x8"] })).toEqual({ text: "0x18", error: false });
+        expect(await call("floorRoot", { number: "0x40", n: "0x2" })).toEqual({ text: "0x8", error: false });
+        expect(await call("ceilRoot", { number: "0x41", n: "0x2" })).toEqual({ text: "0x9", error: false });
+        expect(await call("floorRoot", { number: "-0x8", n: "0x3" })).toEqual({ text: "-0x2", error: false });
+        expect(await call("combination", { n: "0x5", k: "0x2" })).toEqual({ text: "0xa", error: false });
+        expect(await call("permutation", { n: "0x5", k: "0x2" })).toEqual({ text: "0x14", error: false });
+        expect(await call("bitLength", { value: "0xff" })).toEqual({ text: "0x8", error: false });
+        expect(await call("bitCount", { value: "0xff" })).toEqual({ text: "0x8", error: false });
+        expect(await call("trailingZeros", { value: "0x10" })).toEqual({ text: "0x4", error: false });
+        expect(await call("factorize", { value: "0x168" })).toEqual({
+            text: '{"factors":[{"prime":"0x2","exponent":"0x3"},{"prime":"0x3","exponent":"0x2"},{"prime":"0x5","exponent":"0x1"}]}',
+            error: false
+        });
+        expect(await call("floorRoot", { number: 64, n: 2 })).toEqual({ text: "8", error: false });
+        expect(await call("factorial", { n: 5 })).toEqual({ text: "120", error: false });
+        expect(await call("bitLength", { value: "18446744073709551615" })).toEqual({ text: "64", error: false });
+    });
+
+    it("keeps convertBase output prefixed and round-trips prefixed inputs", async () => {
+        expect(await call("convertBase", { value: "0xff", fromBase: 16, toBase: 2 })).toEqual({ text: "0b11111111", error: false });
+        expect(await call("convertBase", { value: "-0b1010", fromBase: 2, toBase: 16 })).toEqual({ text: "-0xa", error: false });
+        expect(await call("convertBase", { value: "+0o17", fromBase: 8, toBase: 10 })).toEqual({ text: "15", error: false });
     });
 });

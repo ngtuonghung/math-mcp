@@ -226,11 +226,13 @@ export function packInteger(value: bigint, bits: Width, signed: boolean, littleE
     if (value < min || value > max) throw new Error(`Value must be between ${min} and ${max}`);
     const bytes = packedBytes(value, bits);
     if (!littleEndian) bytes.reverse();
-    return bytes.map(byte => byte.toString(16).padStart(2, "0")).join("");
+    return "0x" + bytes.map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function unpackInteger(value: string, bits: Width, signed: boolean, littleEndian: boolean): bigint {
-    const text = value.trim().replace(/^0[xX]/, "").replace(/\s+/g, "");
+    const compact = value.trim().replace(/\s+/g, "");
+    if (!/^0[xX]/.test(compact)) throw new Error("Expected hexadecimal bytes with a 0x prefix");
+    const text = compact.replace(/^0[xX]/, "");
     const size = bits / 8;
     if (!/^[0-9a-f]+$/i.test(text) || text.length !== size * 2) {
         throw new Error(`Expected ${size} hexadecimal bytes`);

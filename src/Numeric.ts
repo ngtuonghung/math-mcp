@@ -3,26 +3,38 @@ import { z } from "zod";
 export const numericInput = z.union([
     z.number().refine(value => !Number.isInteger(value) || Number.isSafeInteger(value),
         "Use a decimal string for integers above 2^53-1"),
-    z.string().regex(/^(?:-?(?:0|[1-9][0-9]*)|-?0[xX][0-9a-fA-F]+)$/,
-        "Expected a decimal or 0x-hex integer string")
-]).describe("JSON number, a decimal integer string, or a 0x-hex integer string (hex requires the 0x prefix; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
+    z.string().regex(/^(?:-?(?:0|[1-9][0-9]*)|-?0[xX][0-9a-fA-F]+|-?0[bB][01]+)$/,
+        "Expected a decimal, 0x-hex, or 0b-binary integer string")
+]).describe("JSON number, a decimal integer string, or a 0x-hex or 0b-binary integer string (hex requires 0x and binary requires 0b; strings accept integers only, no exponent; use decimal strings for integers larger than 9007199254740991)");
 
 export type NumericInput = z.infer<typeof numericInput>;
+export type Radix = "dec" | "hex" | "bin";
 const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
 
 export function isHex(input: NumericInput): boolean {
     return typeof input === "string" && /^-?0[xX][0-9a-fA-F]+$/.test(input);
 }
 
-export function formatHex(value: bigint, hex: boolean): string {
-    if (!hex) return value.toString();
-    return (value < 0n ? "-0x" : "0x") + (value < 0n ? -value : value).toString(16);
+export function isBin(input: NumericInput): boolean {
+    return typeof input === "string" && /^-?0[bB][01]+$/.test(input);
+}
+
+export function detectMode(inputs: NumericInput[]): Radix {
+    if (inputs.every(isHex)) return "hex";
+    if (inputs.every(isBin)) return "bin";
+    return "dec";
+}
+
+export function formatInt(value: bigint, radix: Radix): string {
+    if (radix === "dec") return value.toString();
+    const digits = radix === "hex" ? 16 : 2;
+    return (value < 0n ? "-" : "") + (radix === "hex" ? "0x" : "0b") + (value < 0n ? -value : value).toString(digits);
 }
 
 function parse(value: NumericInput): number | bigint {
     if (typeof value === "number") return value;
-    // BigInt accepts 0x-hex but not a leading minus on it, so strip and negate.
-    return /^-0[xX]/.test(value) ? -BigInt(value.slice(1)) : BigInt(value);
+    // BigInt accepts prefixed literals but not a leading minus on them, so strip and negate.
+    return /^-0[xXbB]/.test(value) ? -BigInt(value.slice(1)) : BigInt(value);
 }
 
 function safeNumber(value: number | bigint): number {
@@ -52,7 +64,7 @@ export function format(value: number | bigint): string {
 }
 
 export function formatInteger(inputs: NumericInput[], value: bigint): string {
-    return formatHex(value, inputs.every(isHex));
+    return formatInt(value, detectMode(inputs));
 }
 
 export function calculate(
@@ -76,7 +88,7 @@ export function calculate(
 export function mode(inputs: NumericInput[]): string {
     const values = inputs.map(parse);
     if (values.every(value => typeof value === "bigint" || Number.isInteger(value))) {
-        const hex = inputs.every(isHex);
+        const radix = detectMode(inputs);
         const counts = new Map<bigint, number>();
         for (const value of values) {
             const key = BigInt(value);
@@ -84,7 +96,7 @@ export function mode(inputs: NumericInput[]): string {
         }
         const frequency = [...counts.values()].reduce((max, count) => Math.max(max, count), 0);
         const entries = [...counts].filter(([, count]) => count === frequency)
-            .map(([value]) => formatHex(value, hex));
+            .map(([value]) => formatInt(value, radix));
         return `Entries (${entries.join(", ")}) appeared ${frequency} times`;
     }
     const counts = new Map<number, number>();

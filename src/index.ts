@@ -9,17 +9,17 @@ import {
     bitCount, bitLength, ceilRoot, factorize, floorRoot, gcd, lcm,
     modularExponentiation, modularInverse, packInteger, rotate, trailingZeros, unpackInteger
 } from "./integer.js";
-import { calculate, format, formatHex, formatInteger, integers, isHex, mode, numericInput } from "./Numeric.js";
+import { calculate, detectMode, formatInt, formatInteger, integers, mode, numericInput } from "./Numeric.js";
 import type { NumericInput } from "./Numeric.js";
 
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
-const numericDoc = " Numeric arguments accept JSON numbers, decimal integer strings, or 0x-hex integer strings; string inputs accept integers only.";
+const numericDoc = " Numeric arguments accept JSON numbers, decimal integer strings, or 0x-hex or 0b-binary integer strings; string inputs accept integers only.";
 const numericDescription = (description: string) => description + numericDoc;
-const echoDoc = " If every numeric input is a 0x-hex string, integer results are returned as 0x-hex; otherwise results are decimal.";
+const echoDoc = " If every numeric input is a 0x-hex string, integer results are returned as 0x-hex; if every input is a 0b-binary string, they are returned as 0b-binary; otherwise results are decimal.";
 const echoDescription = (description: string) => numericDescription(description) + echoDoc;
 const pair = { firstNumber: numericInput, secondNumber: numericInput };
 const list = { numbers: z.array(numericInput).min(1)
-    .describe("One or more numeric values; each accepts a JSON number, a decimal integer string, or a 0x-hex integer string.") };
+    .describe("One or more numeric values; each accepts a JSON number, a decimal integer string, or a 0x-hex or 0b-binary integer string.") };
 const unary = { number: numericInput };
 const sum = (values: bigint[]) => values.reduce((total, value) => total + value, 0n);
 const factorial = (n: bigint) => {
@@ -57,7 +57,7 @@ const baseDigits: Record<number, RegExp> = { 2: /^[01]+$/, 8: /^[0-7]+$/, 10: /^
 const basePrefix: Record<number, string> = { 2: "0b", 8: "0o", 10: "", 16: "0x" };
 
 export default function createServer() {
-    const mathServer = new McpServer({ name: "math", version: "0.5.0" });
+    const mathServer = new McpServer({ name: "math", version: "0.6.0" });
 
     mathServer.tool("add", echoDescription("Adds firstNumber and secondNumber; integer inputs are exact."), pair,
         async ({ firstNumber, secondNumber }) => reply(calculate([firstNumber, secondNumber],
@@ -101,60 +101,62 @@ export default function createServer() {
                 if (b > 10000n) throw new Error("Integer exponent must be at most 10000 for exact results");
                 return a ** b;
             })));
-    mathServer.tool("floorRoot", numericDescription("Calculates the exact integer floor of the nth root; the degree must be at least 1 and a negative value supports only an odd degree."),
+    mathServer.tool("floorRoot", echoDescription("Calculates the exact integer floor of the nth root; the degree must be at least 1 and a negative value supports only an odd degree."),
         { number: numericInput, n: numericInput },
         async ({ number, n }) => {
             const [value, degree] = integers([number, n]);
-            return reply(format(floorRoot(value, degree)));
+            return reply(formatInteger([number, n], floorRoot(value, degree)));
         });
-    mathServer.tool("ceilRoot", numericDescription("Calculates the exact integer ceiling of the nth root; the degree must be at least 1 and a negative value supports only an odd degree."),
+    mathServer.tool("ceilRoot", echoDescription("Calculates the exact integer ceiling of the nth root; the degree must be at least 1 and a negative value supports only an odd degree."),
         { number: numericInput, n: numericInput },
         async ({ number, n }) => {
             const [value, degree] = integers([number, n]);
-            return reply(format(ceilRoot(value, degree)));
+            return reply(formatInteger([number, n], ceilRoot(value, degree)));
         });
-    mathServer.tool("gcd", numericDescription("Calculates the exact greatest common divisor of one or more integers."), list,
-        async ({ numbers }) => reply(format(gcd(integers(numbers)))));
-    mathServer.tool("lcm", numericDescription("Calculates the exact least common multiple of one or more integers."), list,
-        async ({ numbers }) => reply(format(lcm(integers(numbers)))));
+    mathServer.tool("gcd", echoDescription("Calculates the exact greatest common divisor of one or more integers."), list,
+        async ({ numbers }) => reply(formatInteger(numbers, gcd(integers(numbers)))));
+    mathServer.tool("lcm", echoDescription("Calculates the exact least common multiple of one or more integers."), list,
+        async ({ numbers }) => reply(formatInteger(numbers, lcm(integers(numbers)))));
     mathServer.tool("exp", numericDescription("Calculates e raised to the given power using floating-point arithmetic."), unary,
         async ({ number }) => reply(calculate([number], ([value]) => Math.exp(value))));
-    mathServer.tool("factorial", numericDescription("Calculates the exact factorial n! for an integer from 0 through 10000."),
+    mathServer.tool("factorial", echoDescription("Calculates the exact factorial n! for an integer from 0 through 10000."),
         { n: numericInput },
         async ({ n }) => {
             const [value] = integers([n]);
             if (value < 0n || value > 10000n) throw new Error("n must be between 0 and 10000");
-            return reply(factorial(value).toString());
+            return reply(formatInteger([n], factorial(value)));
         });
-    mathServer.tool("combination", numericDescription("Calculates the exact binomial coefficient C(n, k) for n from 0 through 100000 and 0 <= k <= n."),
+    mathServer.tool("combination", echoDescription("Calculates the exact binomial coefficient C(n, k) for n from 0 through 100000 and 0 <= k <= n."),
         { n: numericInput, k: numericInput },
         async ({ n, k }) => {
             const [total, choose] = integers([n, k]);
             if (total < 0n || total > 100000n) throw new Error("n must be between 0 and 100000");
             if (choose < 0n || choose > total) throw new Error("k must be between 0 and n");
-            return reply(combination(total, choose).toString());
+            return reply(formatInteger([n, k], combination(total, choose)));
         });
-    mathServer.tool("permutation", numericDescription("Calculates the exact number of ordered selections P(n, k) for n from 0 through 100000 and 0 <= k <= n."),
+    mathServer.tool("permutation", echoDescription("Calculates the exact number of ordered selections P(n, k) for n from 0 through 100000 and 0 <= k <= n."),
         { n: numericInput, k: numericInput },
         async ({ n, k }) => {
             const [total, choose] = integers([n, k]);
             if (total < 0n || total > 100000n) throw new Error("n must be between 0 and 100000");
             if (choose < 0n || choose > total) throw new Error("k must be between 0 and n");
-            return reply(falling(total, choose).toString());
+            return reply(formatInteger([n, k], falling(total, choose)));
         });
-    mathServer.tool("convertBase", "Converts an exact integer string between bases 2, 8, 10, and 16 and returns lowercase digits without a prefix.",
+    mathServer.tool("convertBase", "Converts an exact integer string between bases 2, 8, 10, and 16. The result carries the base prefix 0b, 0o, or 0x; base 10 stays plain.",
         {
             value: z.string().min(1)
-                .describe("Integer in fromBase, using digits valid for that base; an optional sign is allowed, and an optional 0x prefix is allowed for base 16"),
+                .describe("Integer in fromBase, using digits valid for that base; an optional sign and an optional 0b, 0o, or 0x prefix matching fromBase are allowed"),
             fromBase: baseOption, toBase: baseOption
         },
         async ({ value, fromBase, toBase }) => {
             const match = /^([+-]?)(.*)$/.exec(value.trim());
             if (!match || !match[2]) throw new Error("Expected an integer string");
-            const digits = fromBase === 16 ? match[2].replace(/^0[xX]/, "") : match[2];
+            let digits = match[2];
+            const prefix = basePrefix[fromBase];
+            if (prefix) digits = digits.replace(new RegExp(`^0[${prefix[1]}${prefix[1].toUpperCase()}]`), "");
             if (!baseDigits[fromBase].test(digits)) throw new Error(`Expected base ${fromBase} digits`);
-            const magnitude = BigInt(basePrefix[fromBase] + digits.toLowerCase());
-            return reply((match[1] === "-" ? -magnitude : magnitude).toString(toBase));
+            const magnitude = BigInt(prefix + digits.toLowerCase());
+            return reply((match[1] === "-" ? "-" : "") + basePrefix[toBase] + magnitude.toString(toBase));
         });
 
     mathServer.tool("modPow", echoDescription("Calculates base raised to a nonnegative exponent modulo a nonzero modulus exactly; exponent and modulus are limited to 8192 bits."),
@@ -169,33 +171,34 @@ export default function createServer() {
             const [a, m] = integers([value, modulus]);
             return reply(formatInteger([value, modulus], modularInverse(a, m)));
         });
-    mathServer.tool("factorize", numericDescription("Returns the exact ascending prime-power factorization for an integer from 2 through 2^64 - 1."),
+    mathServer.tool("factorize", echoDescription("Returns the exact ascending prime-power factorization for an integer from 2 through 2^64 - 1."),
         { value: numericInput },
         async ({ value }) => {
             const [number] = integers([value]);
+            const radix = detectMode([value]);
             return reply(JSON.stringify({
                 factors: factorize(number).map(({ prime, exponent }) => ({
-                    prime: prime.toString(), exponent: exponent.toString()
+                    prime: formatInt(prime, radix), exponent: formatInt(exponent, radix)
                 }))
             }));
         });
-    mathServer.tool("bitLength", numericDescription("Counts the significant binary bits in a nonnegative integer; 0 has bit length 0."),
+    mathServer.tool("bitLength", echoDescription("Counts the significant binary bits in a nonnegative integer; 0 has bit length 0."),
         { value: numericInput },
         async ({ value }) => {
             const [number] = integers([value]);
-            return reply(bitLength(number).toString());
+            return reply(formatInteger([value], BigInt(bitLength(number))));
         });
-    mathServer.tool("bitCount", numericDescription("Counts the set binary bits in a nonnegative integer."),
+    mathServer.tool("bitCount", echoDescription("Counts the set binary bits in a nonnegative integer."),
         { value: numericInput },
         async ({ value }) => {
             const [number] = integers([value]);
-            return reply(bitCount(number).toString());
+            return reply(formatInteger([value], BigInt(bitCount(number))));
         });
-    mathServer.tool("trailingZeros", numericDescription("Counts trailing zero binary bits in a nonzero nonnegative integer; 0 is undefined."),
+    mathServer.tool("trailingZeros", echoDescription("Counts trailing zero binary bits in a nonzero nonnegative integer; 0 is undefined."),
         { value: numericInput },
         async ({ value }) => {
             const [number] = integers([value]);
-            return reply(trailingZeros(number).toString());
+            return reply(formatInteger([value], BigInt(trailingZeros(number))));
         });
     const rotateInput = { value: numericInput, bits: widthOption, count: numericInput };
     mathServer.tool("rotateLeft", echoDescription("Rotates value left within an unsigned 8, 16, 32, or 64-bit field; the count is taken modulo the selected width."), rotateInput,
@@ -211,19 +214,19 @@ export default function createServer() {
     const packInput = {
         value: numericInput, bits: widthOption, signed: signedOption, endian: endianOption
     };
-    mathServer.tool("packInteger", numericDescription("Encodes an in-range integer as lowercase hexadecimal bytes using the selected width, signedness, and byte order."), packInput,
+    mathServer.tool("packInteger", numericDescription("Encodes an in-range integer as lowercase 0x-prefixed hexadecimal bytes using the selected width, signedness, and byte order."), packInput,
         async ({ value, bits, signed, endian }) => {
             const [number] = integers([value]);
             return reply(packInteger(number, bits, signed, endian === "little"));
         });
-    mathServer.tool("unpackInteger", "Decodes exact hexadecimal bytes into an integer using the selected width, signedness, and byte order.",
+    mathServer.tool("unpackInteger", "Decodes exact hexadecimal bytes into an integer using the selected width, signedness, and byte order. The integer result is returned as 0x-hex.",
         {
             value: z.string().min(1)
-                .describe("Exactly width / 8 hexadecimal digits, as one string; an optional 0x prefix is allowed and surrounding or intervening whitespace is ignored"),
+                .describe("Exactly width / 8 hexadecimal digits with a required 0x prefix, as one string; surrounding or intervening whitespace is ignored"),
             bits: widthOption, signed: signedOption, endian: endianOption
         },
         async ({ value, bits, signed, endian }) => {
-            return reply(format(unpackInteger(value, bits, signed, endian === "little")));
+            return reply(formatInt(unpackInteger(value, bits, signed, endian === "little"), "hex"));
         });
 
     mathServer.tool("mean", echoDescription("Calculates the arithmetic mean of one or more numbers."), list,
@@ -287,8 +290,8 @@ export default function createServer() {
             if (address < 0n || size <= 0n) throw new Error("Value must be nonnegative and boundary positive");
             const down = address / size * size;
             const up = down === address ? down : down + size;
-            const hex = [value, boundary].every(isHex);
-            return reply(JSON.stringify({ down: formatHex(down, hex), up: formatHex(up, hex) }));
+            const radix = detectMode([value, boundary]);
+            return reply(JSON.stringify({ down: formatInt(down, radix), up: formatInt(up, radix) }));
         });
 
     mathServer.tool("castInteger", echoDescription("Wraps an integer to a signed or unsigned 8, 16, 32, or 64-bit type and reports whether the original value was in range."),
@@ -299,9 +302,9 @@ export default function createServer() {
             const min = signed ? -(1n << (width - 1n)) : 0n;
             const max = (1n << (signed ? width - 1n : width)) - 1n;
             const result = signed ? BigInt.asIntN(bits, input) : BigInt.asUintN(bits, input);
-            const hex = isHex(value);
+            const radix = detectMode([value]);
             return reply(JSON.stringify({
-                result: formatHex(result, hex), min: formatHex(min, hex), max: formatHex(max, hex),
+                result: formatInt(result, radix), min: formatInt(min, radix), max: formatInt(max, radix),
                 status: input < min ? "underflow" : input > max ? "overflow" : "inRange"
             }));
         });

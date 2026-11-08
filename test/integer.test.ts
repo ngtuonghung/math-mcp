@@ -94,7 +94,8 @@ describe("BigInt CTF operations", () => {
                 for (const value of [...signedCases, ...unsignedCases]) {
                     const packed = packInteger(value, bits, false, endian);
                     expect(unpackInteger(packed, bits, false, endian)).toBe(value);
-                    expect(packed).toHaveLength(bits / 4);
+                    expect(packed).toHaveLength(bits / 4 + 2);
+                    expect(packed.startsWith("0x")).toBe(true);
                 }
                 const signedMin = -(1n << BigInt(bits - 1));
                 expect(unpackInteger(packInteger(signedMin, bits, true, endian), bits, true, endian))
@@ -102,8 +103,9 @@ describe("BigInt CTF operations", () => {
             }
         }
         expect(packInteger(BigInt("140737348182416"), 64, false, true))
-            .toBe("9021a5f7ff7f0000");
-        expect(unpackInteger("de ad be ef", 32, false, true)).toBe(4022250974n);
+            .toBe("0x9021a5f7ff7f0000");
+        expect(unpackInteger("0xde ad be ef", 32, false, true)).toBe(4022250974n);
+        expect(() => unpackInteger("de ad be ef", 32, false, true)).toThrow();
         expect(() => unpackInteger("00", 16, false, true)).toThrow();
     });
 });
