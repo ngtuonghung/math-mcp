@@ -63,25 +63,26 @@ afterAll(async () => {
 describe("deterministic MCP operation properties", () => {
     it("covers every advertised operation", async () => {
         const { tools } = await client.listTools();
-        expect(tools).toHaveLength(49);
-        expect(new Set(tools.map(tool => tool.name)).size).toBe(49);
+        expect(tools).toHaveLength(51);
+        expect(new Set(tools.map(tool => tool.name)).size).toBe(51);
     });
 
     it("computes arithmetic, powers, and combinatorics exactly", async () => {
         for (let round = 0; round < 25; round++) {
             const a = randomBig(randomInt(1) ? 64 : 80);
             const b = randomBig(randomInt(1) ? 64 : 80);
-            await exact("add", { firstNumber: a.toString(), secondNumber: b.toString() }, a + b);
+            await exact("add", { value: a.toString(), addend: b.toString() }, a + b);
 
             const left = randomBig(64), right = randomBig(64) || 1n;
             await exact("subtract", {
-                minuend: left.toString(), subtrahend: right.toString()
+                value: left.toString(), subtrahend: right.toString()
             }, left - right);
             await exact("multiply", {
-                firstNumber: left.toString(), secondNumber: right.toString()
+                value: left.toString(), factor: right.toString()
             }, left * right);
+            await exact("product", { numbers: [left.toString(), right.toString(), "3"] }, left * right * 3n);
             await exact("modulo", {
-                numerator: left.toString(), denominator: right.toString()
+                value: left.toString(), divisor: right.toString()
             }, left % right);
         }
 
@@ -90,32 +91,33 @@ describe("deterministic MCP operation properties", () => {
             await exact("sum", { numbers: values }, values.reduce((total, value) => total + BigInt(value), 0n));
 
             const base = randomInteger(48, false), exponent = randomInt(64);
-            await exact("power", { base, exponent }, BigInt(base) ** BigInt(exponent));
+            await exact("power", { value: base, exponent }, BigInt(base) ** BigInt(exponent));
 
             const n = BigInt(randomInt(80)), k = BigInt(randomInt(81));
             if (k <= n) {
-                const choose = await ok("combination", { n: n.toString(), k: k.toString() });
-                const opposite = await ok("combination", { n: n.toString(), k: (n - k).toString() });
+                const choose = await ok("combination", { value: n.toString(), k: k.toString() });
+                const opposite = await ok("combination", { value: n.toString(), k: (n - k).toString() });
                 expect(choose).toBe(opposite);
-                const selected = await ok("permutation", { n: n.toString(), k: k.toString() });
+                const selected = await ok("permutation", { value: n.toString(), k: k.toString() });
                 expect(BigInt(selected) % BigInt(choose)).toBe(0n);
             }
         }
 
-        await exact("factorial", { n: 80 }, Array.from({ length: 80 }, (_, index) => BigInt(index + 1))
+        await exact("factorial", { value: 80 }, Array.from({ length: 80 }, (_, index) => BigInt(index + 1))
             .reduce((product, value) => product * value, 1n));
-        await rejected("division", { numerator: 1, denominator: 0 });
-        await rejected("modulo", { numerator: 1, denominator: 0 });
-        await rejected("power", { base: 0, exponent: -1 });
-        await rejected("power", { base: 2, exponent: 10001 });
-        await rejected("factorial", { n: 10001 });
+        await rejected("division", { value: 1, divisor: 0 });
+        await rejected("modulo", { value: 1, divisor: 0 });
+        await rejected("power", { value: 0, exponent: -1 });
+        await rejected("power", { value: 2, exponent: 10001 });
+        await rejected("power", { value: (1n << 4096n).toString(), exponent: 10000 });
+        await rejected("factorial", { value: 10001 });
     });
 
     it("calculates roots, rounding, and floating-point primitives", async () => {
         for (let round = 0; round < 25; round++) {
             const value = randomBig(80), degree = BigInt(randomInt(8) + 1);
-            const floor = BigInt(await ok("floorRoot", { number: value.toString(), n: degree.toString() }));
-            const ceiling = BigInt(await ok("ceilRoot", { number: value.toString(), n: degree.toString() }));
+            const floor = BigInt(await ok("floorRoot", { value: value.toString(), degree: degree.toString() }));
+            const ceiling = BigInt(await ok("ceilRoot", { value: value.toString(), degree: degree.toString() }));
             expect(floor ** degree).toBeLessThanOrEqual(value);
             expect((floor + 1n) ** degree).toBeGreaterThan(value);
             expect(ceiling ** degree).toBeGreaterThanOrEqual(value);
@@ -125,31 +127,34 @@ describe("deterministic MCP operation properties", () => {
             const odd = BigInt(randomInt(7) * 2 + 1);
             const bounded = randomBig(50) + 2n;
             const negativeFloor = BigInt(await ok("floorRoot", {
-                number: (-bounded).toString(), n: odd.toString()
+                value: (-bounded).toString(), degree: odd.toString()
             }));
             const negativeCeiling = BigInt(await ok("ceilRoot", {
-                number: (-bounded).toString(), n: odd.toString()
+                value: (-bounded).toString(), degree: odd.toString()
             }));
             expect(negativeFloor ** odd).toBeLessThanOrEqual(-bounded);
             expect(negativeCeiling ** odd).toBeGreaterThanOrEqual(-bounded);
         }
 
         const number = random() * 20 - 10;
-        expect(await ok("floor", { number })).toBe(String(Math.floor(number)));
-        expect(await ok("ceiling", { number })).toBe(String(Math.ceil(number)));
-        expect(await ok("round", { number })).toBe(String(Math.round(number)));
-        expect(await ok("exp", { number })).toBe(String(Math.exp(number)));
+        expect(await ok("floor", { value: number })).toBe(String(Math.floor(number)));
+        expect(await ok("ceiling", { value: number })).toBe(String(Math.ceil(number)));
+        expect(await ok("round", { value: number })).toBe(String(Math.round(number)));
+        expect(await ok("exp", { value: number })).toBe(String(Math.exp(number)));
+        // A client that quotes scalar numbers must still reach the floating-point path.
+        expect(await ok("floor", { value: number.toString() })).toBe(String(Math.floor(number)));
+        expect(await ok("sin", { value: number.toString() })).toBe(String(Math.sin(number)));
 
         const radians = random() * Math.PI * 2 - Math.PI;
-        expect(await ok("sin", { number: radians })).toBe(String(Math.sin(radians)));
-        expect(await ok("cos", { number: radians })).toBe(String(Math.cos(radians)));
-        expect(await ok("tan", { number: radians })).toBe(String(Math.tan(radians)));
-        expect(await ok("arcsin", { number: 0.25 })).toBe(String(Math.asin(0.25)));
-        expect(await ok("arccos", { number: -0.25 })).toBe(String(Math.acos(-0.25)));
-        expect(await ok("arctan", { number: -2.5 })).toBe(String(Math.atan(-2.5)));
-        expect(await ok("radiansToDegrees", { number: radians })).toBe(String(radians * 180 / Math.PI));
-        expect(await ok("degreesToRadians", { number: 123.5 })).toBe(String(123.5 * Math.PI / 180));
-        await rejected("arcsin", { number: 2 });
+        expect(await ok("sin", { value: radians })).toBe(String(Math.sin(radians)));
+        expect(await ok("cos", { value: radians })).toBe(String(Math.cos(radians)));
+        expect(await ok("tan", { value: radians })).toBe(String(Math.tan(radians)));
+        expect(await ok("arcsin", { value: 0.25 })).toBe(String(Math.asin(0.25)));
+        expect(await ok("arccos", { value: -0.25 })).toBe(String(Math.acos(-0.25)));
+        expect(await ok("arctan", { value: -2.5 })).toBe(String(Math.atan(-2.5)));
+        expect(await ok("radiansToDegrees", { value: radians })).toBe(String(radians * 180 / Math.PI));
+        expect(await ok("degreesToRadians", { value: 123.5 })).toBe(String(123.5 * Math.PI / 180));
+        await rejected("arcsin", { value: 2 });
     });
 
     it("satisfies divisibility and modular identities", async () => {
@@ -172,7 +177,7 @@ describe("deterministic MCP operation properties", () => {
             const modulus = randomBig(80) || 1n;
             const smallExponent = BigInt(randomInt(40));
             await exact("modPow", {
-                base: a.toString(), exponent: smallExponent.toString(), modulus: modulus.toString()
+                value: a.toString(), exponent: smallExponent.toString(), modulus: modulus.toString()
             }, (a % modulus + modulus) ** smallExponent % modulus);
 
             if (modulus > 1n && a % modulus !== 0n) {
@@ -197,7 +202,7 @@ describe("deterministic MCP operation properties", () => {
             }
             expect(product).toBe(value < 2n ? 2n : value);
         }
-        await rejected("modPow", { base: 1, exponent: -1, modulus: 5 });
+        await rejected("modPow", { value: 1, exponent: -1, modulus: 5 });
         await rejected("modInverse", { value: 2, modulus: 4 });
         await rejected("factorize", { value: 1 });
     });
@@ -232,23 +237,27 @@ describe("deterministic MCP operation properties", () => {
                 .toBe(formatInt(rangeValue, "hex"));
             await rejected("packInteger", { value: (max + 1n).toString(), bits, signed, endian });
 
-            await exact("bitAnd", { firstNumber: "12", secondNumber: "10" }, 8n);
+            await exact("bitAnd", { numbers: ["12", "10"] }, 8n);
+            await exact("bitXor", { numbers: ["12", "10", "3"] }, 12n ^ 10n ^ 3n);
+            await exact("bitNot", { value: "12" }, -13n);
+            await exact("bitNot", { value: "12", bits: 8 }, 243n);
         }
 
         for (let round = 0; round < 30; round++) {
             const value = randomBig(70) - 2n ** 69n, other = randomBig(70) - 2n ** 69n;
             await exact("bitOr", {
-                firstNumber: value.toString(), secondNumber: other.toString()
+                numbers: [value.toString(), other.toString()]
             }, value | other);
             await exact("bitXor", {
-                firstNumber: value.toString(), secondNumber: other.toString()
+                numbers: [value.toString(), other.toString()]
             }, value ^ other);
+            await exact("bitNot", { value: value.toString() }, ~value);
             const count = BigInt(randomInt(64));
             await exact("shiftLeft", {
-                number: value.toString(), count: count.toString()
+                value: value.toString(), count: count.toString()
             }, value << count);
             await exact("shiftRight", {
-                number: value.toString(), count: count.toString()
+                value: value.toString(), count: count.toString()
             }, value >> count);
 
             const bits = [8, 16, 32, 64][randomInt(3)] as 8 | 16 | 32 | 64;
@@ -282,7 +291,7 @@ describe("deterministic MCP operation properties", () => {
 
         await rejected("bitLength", { value: -1 });
         await rejected("trailingZeros", { value: 0 });
-        await rejected("shiftLeft", { number: 1, count: -1 });
+        await rejected("shiftLeft", { value: 1, count: -1 });
         await rejected("unpackInteger", { value: "00", bits: 16, signed: false, endian: "big" });
     });
 

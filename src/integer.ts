@@ -57,7 +57,7 @@ function isPrime(value: bigint): boolean {
 }
 
 function pollard(value: bigint): bigint {
-    for (let increment = 1n; ; increment++) {
+    for (let increment = 1n; increment <= 100n; increment++) {
         for (let seed = 2n; seed < 7n; seed++) {
             let tortoise = seed;
             let hare = seed;
@@ -72,6 +72,7 @@ function pollard(value: bigint): bigint {
             if (divisor > 1n && divisor < value) return divisor;
         }
     }
+    throw new Error("Could not factor this value");
 }
 
 function addFactors(value: bigint, factors: Map<bigint, bigint>): void {
