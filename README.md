@@ -1,24 +1,28 @@
 # Math-MCP
 
-Math-MCP is a Model Context Protocol (MCP) server exposing a small, deterministic
-library of mathematical primitives. It is designed for LLMs and applications that
-need reliable calculations, exact integer operations where practical, and a
-consistent text-based tool interface.
+Model Context Protocol (MCP) server. Small, deterministic library of math primitives. Built for LLMs and apps that need reliable calculation, exact integer ops where practical, and one consistent text-based tool interface.
+
+Forked from [ethanhenrickson/math-mcp](https://github.com/ethanhenrickson/math-mcp).
 
 ## Primitives
 
-- Arithmetic, roots, rounding, and factorial/combinatorial operations
-- Exact modular arithmetic and prime factorization
-- Number-base conversion and fixed-width integer encoding
-- Bitwise AND/OR/XOR/NOT, bit-shift, bit-rotation, bit-inspection, alignment, and integer-casting operations
+- Arithmetic, roots, rounding, factorial/combinatorial ops
+- Exact modular arithmetic, prime factorization
+- Number-base conversion, fixed-width integer encoding
+- Bitwise AND/OR/XOR/NOT, bit-shift, bit-rotation, bit-inspection, alignment, integer casting
 - Statistical summaries
-- Trigonometric functions and angle conversion
+- Trigonometric functions, angle conversion
 
 ## Installation
 
-Requires [Node.js](https://nodejs.org/en/download).
+Needs [Node.js](https://nodejs.org/en/download).
 
-Clone this repository and add it to your MCP configuration:
+```bash
+git clone https://github.com/ngtuonghung/math-mcp.git
+cd math-mcp && npm install
+```
+
+Add to MCP config:
 
 ```json
 "math": {
@@ -27,9 +31,7 @@ Clone this repository and add it to your MCP configuration:
 }
 ```
 
-Replace `PATH/TO/PROJECT` with the actual repository location. The build is not
-committed; `npm install` creates it automatically. After modifying the source,
-rebuild with:
+Replace `PATH/TO/PROJECT` with real repo location. Build not committed. `npm install` creates it. After source change, rebuild:
 
 ```bash
 npm run build
@@ -37,47 +39,45 @@ npm run build
 
 ## Parameter names
 
-Every tool names its operand the same way, so only two names have to be
-remembered: **`numbers`** for a list of operands (`sum`, `product`, `mean`,
-`median`, `mode`, `min`, `max`, `gcd`, `lcm`, `bitAnd`, `bitOr`, `bitXor`) and
-**`value`** for the operand of every other tool. A second or modifying argument
-keeps its own domain name: `addend`, `subtrahend`, `factor`, `divisor`,
-`exponent`, `modulus`, `degree`, `k`, `count`, `bits`, `boundary`, `signed`,
-`endian`, `fromBase`, and `toBase`.
+Every tool names its operand same way. Two names only:
+
+- **`numbers`**: list of operands. Tools: `sum`, `product`, `mean`, `median`, `mode`, `min`, `max`, `gcd`, `lcm`, `bitAnd`, `bitOr`, `bitXor`.
+- **`value`**: operand of every other tool.
+
+Second or modifying argument keeps own domain name: `addend`, `subtrahend`, `factor`, `divisor`, `exponent`, `modulus`, `degree`, `k`, `count`, `bits`, `boundary`, `signed`, `endian`, `fromBase`, `toBase`.
 
 ## Numeric behavior
 
-Numeric parameters accept JSON numbers, decimal strings, and `0x`-hex,
-`0o`-octal, or `0b`-binary integer strings (hex requires the `0x` prefix, octal
-`0o`, binary `0b`; all accept uppercase digits and a leading minus). Decimal
-strings may carry a fraction or an exponent, such as `"2.5"` or `"1e3"`, so
-clients that send scalar numbers as quoted strings can still reach the
-floating-point tools. Prefixed forms are integers only. Bare digit strings are
-always decimal. Use plain decimal strings for integers larger than
-`9007199254740991`; unsafe, infinite, and `NaN` JSON numbers are rejected, as is
-a result that is not finite.
+Numeric params accept:
 
-For the arithmetic, divisibility, modular, root, combinatorial, bitwise,
-rotation, bit-inspection, alignment, casting, and statistics tools, an integer
-result follows the radix of the inputs by priority: any `0x`-hex input returns
-`0x`-hex, otherwise any `0b`-binary input returns `0b`-binary, otherwise any
-`0o`-octal input returns `0o`-octal, otherwise the result is decimal
-(`-0x` / `-0b` / `-0o` for negatives, unpadded). A decimal count, width, or
-degree therefore no longer drags a hexadecimal result back to decimal, and
-writing one operand in hex is the way to ask for hex output. Floating-point
-results are always decimal text; `mode` echoes radix entries but its frequency
-stays decimal. `packInteger` always returns `0x`-prefixed hexadecimal bytes, and
-`unpackInteger` requires the `0x` prefix on input and returns `0x`-hex.
-`convertBase` returns the base prefix `0b`, `0o`, or `0x`; base 10 stays plain.
+- JSON numbers.
+- Decimal strings. May carry fraction or exponent (`"2.5"`, `"1e3"`). Clients that quote scalars still reach floating-point tools.
+- `0x`-hex, `0o`-octal, `0b`-binary integer strings. Prefix required: hex `0x`, octal `0o`, binary `0b`. Uppercase digits and leading minus accepted. Prefixed forms are integers only.
 
-Operations backed by floating-point math reject large integer inputs when
-conversion would lose precision. Discrete, modular, and bit-oriented operations
-use exact `BigInt` arithmetic.
+Bare digit strings always decimal. Integers above `9007199254740991`: use plain decimal strings. Rejected: unsafe, infinite, and `NaN` JSON numbers; non-finite results.
+
+Output radix, for arithmetic, divisibility, modular, root, combinatorial, bitwise, rotation, bit-inspection, alignment, casting, and statistics tools. Integer result follows input radix by priority:
+
+1. Any `0x`-hex input → `0x`-hex.
+2. Else any `0b`-binary input → `0b`-binary.
+3. Else any `0o`-octal input → `0o`-octal.
+4. Else decimal.
+
+Negatives: `-0x` / `-0b` / `-0o`, unpadded. Decimal count, width, or degree no longer drags hex result back to decimal. Want hex output? Write one operand in hex.
+
+Exceptions:
+
+- Floating-point results: always decimal text.
+- `mode`: echoes radix entries; frequency stays decimal.
+- `packInteger`: always returns `0x`-prefixed hex bytes.
+- `unpackInteger`: requires `0x` prefix on input, returns `0x`-hex.
+- `convertBase`: returns base prefix `0b`, `0o`, or `0x`; base 10 plain.
+
+Floating-point-backed ops reject large integer inputs when conversion loses precision. Discrete, modular, and bit-oriented ops use exact `BigInt` arithmetic.
 
 ## Arithmetic and rounding
 
-Arithmetic operations cover real-valued calculations, integer-safe exponentiation,
-exact integer roots, rounding, and exact discrete counts.
+Real-valued calculation, integer-safe exponentiation, exact integer roots, rounding, exact discrete counts.
 
 | Operation | Description |
 |---|---|
@@ -87,30 +87,29 @@ exact integer roots, rounding, and exact discrete counts.
 | `division` | Divides `value` by `divisor`. |
 | `sum` | Adds one or more numbers. |
 | `product` | Multiplies one or more numbers. |
-| `modulo` | Returns the remainder of division, truncated toward zero, so the sign follows `value` (`-7 mod 3` is `-1`, not `2`). |
-| `power` | Raises `value` to `exponent`. Nonnegative integer exponents are evaluated exactly, up to an exponent of `10000` and a result of `1000000` bits. |
+| `modulo` | Remainder of division, truncated toward zero. Sign follows `value` (`-7 mod 3` is `-1`, not `2`). |
+| `power` | Raises `value` to `exponent`. Nonnegative integer exponents exact, up to exponent `10000` and result `1000000` bits. |
 | `exp` | Calculates `e^number`. |
-| `floorRoot` | Calculates the integer floor of an nth root. Degree must be at least `1`; negative values support odd degrees. |
-| `ceilRoot` | Calculates the integer ceiling of an nth root. Degree must be at least `1`; negative values support odd degrees. |
-| `floor` | Rounds down to the nearest integer. |
-| `ceiling` | Rounds up to the nearest integer. |
-| `round` | Rounds to the nearest integer. |
-| `factorial` | Calculates `value!` exactly for integers from `0` through `10000`. |
-| `combination` | Calculates the binomial coefficient `C(value, k)` exactly for `value` up to `100000`. |
-| `permutation` | Calculates ordered selections `P(value, k)` exactly for `value` up to `100000`. |
+| `floorRoot` | Integer floor of nth root. Degree at least `1`. Negative values support odd degrees. |
+| `ceilRoot` | Integer ceiling of nth root. Degree at least `1`. Negative values support odd degrees. |
+| `floor` | Rounds down to nearest integer. |
+| `ceiling` | Rounds up to nearest integer. |
+| `round` | Rounds to nearest integer. |
+| `factorial` | `value!` exact, integers `0` through `10000`. |
+| `combination` | Binomial coefficient `C(value, k)` exact, `value` up to `100000`. |
+| `permutation` | Ordered selections `P(value, k)` exact, `value` up to `100000`. |
 
 ## Divisibility, modular, and prime operations
 
-These operations provide exact integer foundations for number theory and
-algebraic calculations.
+Exact integer foundations for number theory and algebra.
 
 | Operation | Description |
 |---|---|
-| `gcd` | Calculates the greatest common divisor of one or more integers. |
-| `lcm` | Calculates the least common multiple of one or more integers. |
-| `modPow` | Calculates `value^exponent mod modulus` for a nonnegative exponent and nonzero modulus. Modulus and exponent support up to 8192 bits. |
-| `modInverse` | Calculates the multiplicative inverse modulo a nonzero modulus when it exists. |
-| `factorize` | Returns ascending prime-power factors for integers from `2` through `2^64 - 1`. |
+| `gcd` | Greatest common divisor of one or more integers. |
+| `lcm` | Least common multiple of one or more integers. |
+| `modPow` | `value^exponent mod modulus`. Exponent nonnegative, modulus nonzero. Modulus and exponent up to 8192 bits. |
+| `modInverse` | Multiplicative inverse modulo nonzero modulus, when it exists. |
+| `factorize` | Ascending prime-power factors, integers `2` through `2^64 - 1`. |
 
 `factorize(360)` returns:
 
@@ -120,76 +119,70 @@ algebraic calculations.
 
 ## Number representation and conversion
 
-Representation operations convert between common integer formats and encode
-fixed-width values with explicit byte layout.
+Convert between common integer formats. Encode fixed-width values with explicit byte layout.
 
 | Operation | Description |
 |---|---|
-| `convertBase` | Converts an integer between bases `2`, `8`, `10`, and `16`. A `0b`, `0o`, or `0x` prefix on the input selects its base, otherwise the optional `fromBase` does, defaulting to base 10. The result carries the base prefix (`0b`, `0o`, `0x`; base 10 plain). |
-| `packInteger` | Encodes an in-range integer as lowercase `0x`-prefixed hexadecimal bytes using a width of `8`, `16`, `32`, or `64` bits, signed or unsigned, little- or big-endian. Out-of-range values are rejected. |
-| `unpackInteger` | Decodes `0x`-prefixed hexadecimal bytes as an integer using the same width, signedness, and endian options, and returns the integer as `0x`-hex. |
+| `convertBase` | Converts integer between bases `2`, `8`, `10`, `16`. Input base: `0b`/`0o`/`0x` prefix, else optional `fromBase`, default 10. Result carries base prefix (`0b`, `0o`, `0x`; base 10 plain). |
+| `packInteger` | Encodes in-range integer as lowercase `0x`-prefixed hex bytes. Width `8`, `16`, `32`, or `64` bits; signed or unsigned; little- or big-endian. Out-of-range rejected. |
+| `unpackInteger` | Decodes `0x`-prefixed hex bytes as integer. Same width, signedness, endian options. Returns `0x`-hex. |
 
-`convertBase` with `value="255"` and `toBase=16` returns `"0xff"`, and `value="0o755"` with
-`toBase=16` returns `"0x1ed"`.
+`convertBase` with `value="255"`, `toBase=16` returns `"0xff"`. `value="0o755"`, `toBase=16` returns `"0x1ed"`.
 
 ## Integer and bit operations
 
-Bit operations use fixed and arbitrary `BigInt` behavior. They are useful for
-alignment, masking, type wrapping, and low-level integer transformations.
+Fixed and arbitrary `BigInt` behavior. For alignment, masking, type wrapping, low-level integer transforms.
 
 | Operation | Description |
 |---|---|
-| `bitAnd` | Computes bitwise AND over one or more integers. |
-| `bitOr` | Computes bitwise OR over one or more integers. |
-| `bitXor` | Computes bitwise XOR over one or more integers. |
-| `bitNot` | Computes bitwise NOT. Without `bits` it uses `BigInt` semantics (`NOT value` is `-value - 1`); with `bits` it complements inside an unsigned `8`, `16`, `32`, or `64`-bit field. |
-| `shiftLeft` | Shifts an integer left by `0` to `64` bits. |
-| `shiftRight` | Performs an arithmetic right shift by `0` to `64` bits. |
-| `rotateLeft` | Rotates bits left within an `8`, `16`, `32`, or `64`-bit field. |
-| `rotateRight` | Rotates bits right within an `8`, `16`, `32`, or `64`-bit field. |
-| `bitLength` | Counts binary bits in a nonnegative integer; `0` has length `0`. |
-| `bitCount` | Counts set bits in a nonnegative integer. |
-| `trailingZeros` | Counts trailing zero bits in a nonzero nonnegative integer. |
-| `castInteger` | Wraps an integer to a signed or unsigned `8`, `16`, `32`, or `64`-bit type and reports range status. |
-| `align` | Returns the aligned boundaries at or below and above a nonnegative integer. |
+| `bitAnd` | Bitwise AND over one or more integers. |
+| `bitOr` | Bitwise OR over one or more integers. |
+| `bitXor` | Bitwise XOR over one or more integers. |
+| `bitNot` | Bitwise NOT. No `bits`: `BigInt` semantics (`NOT value` is `-value - 1`). With `bits`: complement inside unsigned `8`, `16`, `32`, or `64`-bit field. |
+| `shiftLeft` | Shifts integer left by `0` to `64` bits. |
+| `shiftRight` | Arithmetic right shift by `0` to `64` bits. |
+| `rotateLeft` | Rotates bits left within `8`, `16`, `32`, or `64`-bit field. |
+| `rotateRight` | Rotates bits right within `8`, `16`, `32`, or `64`-bit field. |
+| `bitLength` | Binary bit count of nonnegative integer. `0` has length `0`. |
+| `bitCount` | Set bits in nonnegative integer. |
+| `trailingZeros` | Trailing zero bits in nonzero nonnegative integer. |
+| `castInteger` | Wraps integer to signed or unsigned `8`, `16`, `32`, or `64`-bit type. Reports range status. |
+| `align` | Aligned boundaries at-or-below and above a nonnegative integer. |
 
-`bitAnd`, `bitOr`, and `bitXor` fold their `numbers` array in order, so masking
-several values takes one call. General bitwise operations use `BigInt`
-semantics. Negative values use signed bitwise behavior, and shifts do not
-truncate results to 64 bits (there is no logical, zero-filling right shift).
-Rotations
-operate on an unsigned fixed-width field and interpret the rotation count modulo
-the selected width.
-Bit-inspection operations reject negative values, and `trailingZeros(0)` is
-rejected because it is mathematically undefined.
+Notes:
+
+- `bitAnd`, `bitOr`, `bitXor` fold `numbers` array in order. Masking several values: one call.
+- General bitwise ops use `BigInt` semantics. Negative values: signed bitwise behavior.
+- Shifts do not truncate to 64 bits. No logical (zero-filling) right shift.
+- Rotations work on unsigned fixed-width field. Rotation count taken modulo selected width.
+- Bit-inspection ops reject negative values. `trailingZeros(0)` rejected: mathematically undefined.
 
 ## Statistics
 
-Statistical operations accept arrays of numeric values and echo the input radix
-for integer results.
+Take arrays of numeric values. Integer results echo input radix.
 
 | Operation | Description |
 |---|---|
-| `mean` | Calculates the arithmetic mean. |
-| `median` | Calculates the median. |
-| `mode` | Reports the most frequent value or values and their frequency. |
-| `min` | Finds the smallest value. |
-| `max` | Finds the largest value. |
+| `mean` | Arithmetic mean. |
+| `median` | Median. |
+| `mode` | Most frequent value or values, plus frequency. |
+| `min` | Smallest value. |
+| `max` | Largest value. |
 
 ## Trigonometry
 
-Trigonometric operations use radians unless explicitly converting units.
+Radians, except unit-conversion tools.
 
 | Operation | Description |
 |---|---|
-| `sin` | Calculates sine. |
-| `cos` | Calculates cosine. |
-| `tan` | Calculates tangent. |
-| `arcsin` | Calculates inverse sine. |
-| `arccos` | Calculates inverse cosine. |
-| `arctan` | Calculates inverse tangent. |
-| `radiansToDegrees` | Converts radians to degrees. |
-| `degreesToRadians` | Converts degrees to radians. |
+| `sin` | Sine. |
+| `cos` | Cosine. |
+| `tan` | Tangent. |
+| `arcsin` | Inverse sine. |
+| `arccos` | Inverse cosine. |
+| `arctan` | Inverse tangent. |
+| `radiansToDegrees` | Radians to degrees. |
+| `degreesToRadians` | Degrees to radians. |
 
 ## Development
 
@@ -198,5 +191,4 @@ npm run build
 npm test
 ```
 
-Source lives in `src/`. Tests are isolated in `test/` and intentionally excluded
-from the distributed build.
+Source in `src/`. Tests in `test/`, excluded from distributed build.
